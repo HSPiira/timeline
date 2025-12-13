@@ -18,8 +18,6 @@ class Event(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        # Composite index for chronological queries per subject
         Index('ix_event_subject_time', 'subject_id', 'event_time'),
-        # Composite index for tenant isolation
         Index('ix_event_tenant_subject', 'tenant_id', 'subject_id'),
     )

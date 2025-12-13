@@ -12,8 +12,8 @@ router = APIRouter()
 @router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
     event: EventCreate,
-    tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    service: Annotated[EventService, Depends(get_event_service)]
+    service: Annotated[EventService, Depends(get_event_service)],
+    tenant: Tenant = Depends(get_current_tenant)
 ):
     """Create a new event with cryptographic chaining"""
     return await service.create_event(tenant.id, event)

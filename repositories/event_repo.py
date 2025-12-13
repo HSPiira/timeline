@@ -2,11 +2,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from models.event import Event
 from schemas.event import EventCreate
+from repositories.base import BaseRepository
 
 
-class EventRepository:
+class EventRepository(BaseRepository[Event]):
     def __init__(self, db: AsyncSession):
-        self.db = db
+        super().__init__(db, Event)
 
     async def get_last_hash(self, subject_id: str) -> str | None:
         """Get the hash of the most recent event for a subject"""
@@ -18,7 +19,7 @@ class EventRepository:
         )
         return result.scalar_one_or_none()
 
-    async def create(
+    async def create_event(
         self,
         tenant_id: str,
         data: EventCreate,
@@ -35,16 +36,7 @@ class EventRepository:
             hash=event_hash,
             previous_hash=previous_hash
         )
-        self.db.add(event)
-        await self.db.flush()
-        await self.db.refresh(event)
-        return event
-
-    async def get_by_id(self, event_id: str) -> Event | None:
-        result = await self.db.execute(
-            select(Event).where(Event.id == event_id)
-        )
-        return result.scalar_one_or_none()
+        return await self.create(event)
 
     async def get_by_subject(self, subject_id: str) -> list[Event]:
         """Get all events for a subject, ordered chronologically"""

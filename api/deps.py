@@ -11,7 +11,7 @@ from services.hash_service import HashService
 
 
 async def get_current_tenant(
-    x_tenant_id: Annotated[str, Header()],
+    x_tenant_id: str = Header(..., alias="x-tenant-id"),
     db: AsyncSession = Depends(get_db)
 ) -> Tenant:
     tenant = await TenantRepository(db).get_by_id(x_tenant_id)

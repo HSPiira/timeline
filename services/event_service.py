@@ -1,10 +1,11 @@
-from repositories.event_repo import EventRepository
-from services.hash_service import HashService
+from core.protocols import IEventRepository, IHashService
 from schemas.event import EventCreate
 
 
 class EventService:
-    def __init__(self, event_repo: EventRepository, hash_service: HashService):
+    """Event service following DIP - depends on abstractions, not concretions"""
+
+    def __init__(self, event_repo: IEventRepository, hash_service: IHashService):
         self.event_repo = event_repo
         self.hash_service = hash_service
 
@@ -24,4 +25,4 @@ class EventService:
         )
 
         # Create event with hash
-        return await self.event_repo.create(tenant_id, data, event_hash, prev_hash)
+        return await self.event_repo.create_event(tenant_id, data, event_hash, prev_hash)
