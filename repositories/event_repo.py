@@ -46,3 +46,26 @@ class EventRepository(BaseRepository[Event]):
             .order_by(Event.event_time)
         )
         return list(result.scalars().all())
+
+    async def get_by_tenant(self, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Event]:
+        """Get all events for a tenant with pagination"""
+        result = await self.db.execute(
+            select(Event)
+            .where(Event.tenant_id == tenant_id)
+            .order_by(Event.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_by_type(self, tenant_id: str, event_type: str) -> list[Event]:
+        """Get all events of a specific type for a tenant"""
+        result = await self.db.execute(
+            select(Event)
+            .where(
+                Event.tenant_id == tenant_id,
+                Event.event_type == event_type
+            )
+            .order_by(Event.event_time.desc())
+        )
+        return list(result.scalars().all())

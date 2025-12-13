@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
 from core.database import engine, Base
-from api import events
+from api import events, subjects, tenants, documents
 
 settings = get_settings()
 
@@ -40,7 +40,10 @@ app.add_middleware(
 )
 
 # Routers
+app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
+app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
 app.include_router(events.router, prefix="/events", tags=["events"])
+app.include_router(documents.router, prefix="/documents", tags=["documents"])
 
 
 @app.get("/")

@@ -1,11 +1,12 @@
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated
 
 from core.database import get_db
 from models.tenant import Tenant
 from repositories.tenant_repo import TenantRepository
 from repositories.event_repo import EventRepository
+from repositories.subject_repo import SubjectRepository
+from repositories.document_repo import DocumentRepository
 from services.event_service import EventService
 from services.hash_service import HashService
 
@@ -28,3 +29,24 @@ async def get_event_service(
         event_repo=EventRepository(db),
         hash_service=HashService()
     )
+
+
+async def get_subject_repo(
+    db: AsyncSession = Depends(get_db)
+) -> SubjectRepository:
+    """Subject repository dependency"""
+    return SubjectRepository(db)
+
+
+async def get_tenant_repo(
+    db: AsyncSession = Depends(get_db)
+) -> TenantRepository:
+    """Tenant repository dependency"""
+    return TenantRepository(db)
+
+
+async def get_document_repo(
+    db: AsyncSession = Depends(get_db)
+) -> DocumentRepository:
+    """Document repository dependency"""
+    return DocumentRepository(db)

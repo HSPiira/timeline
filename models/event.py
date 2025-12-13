@@ -9,7 +9,7 @@ class Event(Base):
 
     id = Column(String, primary_key=True, default=generate_cuid)
     tenant_id = Column(String, ForeignKey("tenant.id"), nullable=False, index=True)
-    subject_id = Column(String, nullable=False, index=True)
+    subject_id = Column(String, ForeignKey("subject.id"), nullable=False, index=True)
     event_type = Column(String, nullable=False, index=True)
     event_time = Column(DateTime(timezone=True), nullable=False)
     payload = Column(JSON, nullable=False)
