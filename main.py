@@ -1,23 +1,57 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.config import get_settings
+from core.database import engine, Base
 from api import events
-from core.exceptions import EventChainBrokenException, TenantNotFoundException
 
-app = FastAPI(title="Timeline", version="1.0.0")
-
-app.include_router(events.router, prefix="/events")
+settings = get_settings()
 
 
-@app.exception_handler(TenantNotFoundException)
-async def tenant_not_found_handler(request: Request, exc: TenantNotFoundException):
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND,
-        content={"detail": "Tenant not found"}
-    )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan events for database initialization"""
+    # Startup: create tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-@app.exception_handler(EventChainBrokenException)
-async def chain_broken_handler(request: Request, exc: EventChainBrokenException):
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Event chain integrity compromised"}
-    )
+    yield
+
+    # Shutdown: dispose engine
+    await engine.dispose()
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    debug=settings.debug,
+    lifespan=lifespan
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure from settings in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Routers
+app.include_router(events.router, prefix="/events", tags=["events"])
+
+
+@app.get("/")
+async def root():
+    return {
+        "name": settings.app_name,
+        "version": settings.app_version,
+        "status": "running"
+    }
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
