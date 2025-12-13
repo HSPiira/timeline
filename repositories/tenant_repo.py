@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.tenant import Tenant
 from repositories.base import BaseRepository
+from core.enums import TenantStatus
 from typing import Optional, List
 
 
@@ -22,16 +23,16 @@ class TenantRepository(BaseRepository[Tenant]):
         """Get all active tenants with pagination"""
         result = await self.db.execute(
             select(Tenant)
-            .where(Tenant.status == "active")
+            .where(Tenant.status == TenantStatus.ACTIVE.value)
             .offset(skip)
             .limit(limit)
         )
         return list(result.scalars().all())
 
-    async def update_status(self, tenant_id: str, status: str) -> Optional[Tenant]:
+    async def update_status(self, tenant_id: str, status: TenantStatus) -> Optional[Tenant]:
         """Update tenant status"""
         tenant = await self.get_by_id(tenant_id)
         if tenant:
-            tenant.status = status
+            tenant.status = status.value
             return await self.update(tenant)
         return None

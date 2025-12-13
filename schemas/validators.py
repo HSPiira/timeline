@@ -50,13 +50,5 @@ class TenantValidators:
             )
         return v.lower()
 
-    @staticmethod
-    @field_validator('status')
-    def validate_status(cls, v: str) -> str:
-        """Ensure status is valid"""
-        valid_statuses = {"active", "suspended", "archived"}
-        if v not in valid_statuses:
-            raise ValueError(
-                f"Tenant status must be one of: {', '.join(valid_statuses)}"
-            )
-        return v
+    # Note: Status validation is handled automatically by Pydantic's TenantStatus enum type
+    # No custom validator needed - Pydantic 2.x validates enum values natively

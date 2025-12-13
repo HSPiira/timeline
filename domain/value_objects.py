@@ -83,22 +83,5 @@ class EventChain:
         return self.previous_hash is not None
 
 
-@dataclass(frozen=True)
-class TenantStatus:
-    """Value object for Tenant status (SRP)"""
-    value: str
-
-    VALID_STATUSES = {"active", "suspended", "archived"}
-
-    def __post_init__(self):
-        if self.value not in self.VALID_STATUSES:
-            raise ValueError(
-                f"Tenant status must be one of: {', '.join(self.VALID_STATUSES)}"
-            )
-
-    def is_active(self) -> bool:
-        return self.value == "active"
-
-    def can_create_events(self) -> bool:
-        """Only active tenants can create events"""
-        return self.is_active()
+# TenantStatus enum moved to core.enums
+# Import it from there: from core.enums import TenantStatus

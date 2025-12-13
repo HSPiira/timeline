@@ -6,9 +6,9 @@ from domain.value_objects import (
     SubjectId,
     EventType,
     Hash,
-    EventChain,
-    TenantStatus
+    EventChain
 )
+from core.enums import TenantStatus
 
 
 @dataclass
@@ -62,16 +62,16 @@ class TenantEntity:
 
     def can_create_events(self) -> bool:
         """Business rule: only active tenants can create events"""
-        return self.status.can_create_events()
+        return self.status == TenantStatus.ACTIVE
 
     def activate(self) -> None:
         """Activate tenant"""
-        self.status = TenantStatus("active")
+        self.status = TenantStatus.ACTIVE
 
     def suspend(self) -> None:
         """Suspend tenant"""
-        self.status = TenantStatus("suspended")
+        self.status = TenantStatus.SUSPENDED
 
     def archive(self) -> None:
         """Archive tenant"""
-        self.status = TenantStatus("archived")
+        self.status = TenantStatus.ARCHIVED

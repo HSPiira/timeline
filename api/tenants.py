@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, status, HTTPException
 from api.deps import get_tenant_repo
 from schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
 from repositories.tenant_repo import TenantRepository
+from core.enums import TenantStatus
 
 
 router = APIRouter()
@@ -87,19 +88,11 @@ async def update_tenant(
 @router.patch("/{tenant_id}/status", response_model=TenantResponse)
 async def update_tenant_status(
     tenant_id: str,
-    status: str,
+    new_status: TenantStatus,
     repo: Annotated[TenantRepository, Depends(get_tenant_repo)]
 ):
     """Update tenant status (activate, suspend, archive)"""
-    valid_statuses = {"active", "suspended", "archived"}
-
-    if status not in valid_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
-        )
-
-    updated = await repo.update_status(tenant_id, status)
+    updated = await repo.update_status(tenant_id, new_status)
 
     if not updated:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -113,7 +106,7 @@ async def delete_tenant(
     repo: Annotated[TenantRepository, Depends(get_tenant_repo)]
 ):
     """Delete a tenant (soft delete by archiving)"""
-    updated = await repo.update_status(tenant_id, "archived")
+    updated = await repo.update_status(tenant_id, TenantStatus.ARCHIVED)
 
     if not updated:
         raise HTTPException(status_code=404, detail="Tenant not found")

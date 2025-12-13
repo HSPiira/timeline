@@ -1,13 +1,14 @@
 from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from typing import Optional
+from core.enums import TenantStatus
 
 
 class TenantCreate(BaseModel):
     """Schema for creating a tenant"""
     code: str
     name: str
-    status: str = "active"
+    status: TenantStatus = TenantStatus.ACTIVE
 
     @field_validator('code')
     @classmethod
@@ -20,32 +21,11 @@ class TenantCreate(BaseModel):
             )
         return v.lower()
 
-    @field_validator('status')
-    @classmethod
-    def validate_status(cls, v: str) -> str:
-        valid_statuses = {"active", "suspended", "archived"}
-        if v not in valid_statuses:
-            raise ValueError(
-                f"Tenant status must be one of: {', '.join(valid_statuses)}"
-            )
-        return v
-
 
 class TenantUpdate(BaseModel):
     """Schema for updating a tenant"""
     name: Optional[str] = None
-    status: Optional[str] = None
-
-    @field_validator('status')
-    @classmethod
-    def validate_status(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None:
-            valid_statuses = {"active", "suspended", "archived"}
-            if v not in valid_statuses:
-                raise ValueError(
-                    f"Tenant status must be one of: {', '.join(valid_statuses)}"
-                )
-        return v
+    status: Optional[TenantStatus] = None
 
 
 class TenantResponse(BaseModel):
@@ -53,7 +33,7 @@ class TenantResponse(BaseModel):
     id: str
     code: str
     name: str
-    status: str
+    status: TenantStatus
     created_at: datetime
     updated_at: datetime
 
