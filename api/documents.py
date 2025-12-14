@@ -1,7 +1,7 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, status, HTTPException
 from models.tenant import Tenant
-from api.deps import get_current_tenant, get_document_repo
+from api.deps import get_current_tenant, get_document_repo, get_document_repo_transactional
 from schemas.document import DocumentCreate, DocumentUpdate, DocumentResponse
 from repositories.document_repo import DocumentRepository
 
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def create_document(
     data: DocumentCreate,
-    repo: Annotated[DocumentRepository, Depends(get_document_repo)],
+    repo: Annotated[DocumentRepository, Depends(get_document_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
     """Create a new document"""
@@ -70,10 +70,7 @@ async def get_documents_by_subject(
     include_deleted: bool = False
 ):
     """Get all documents for a subject"""
-    documents = await repo.get_by_subject(subject_id, include_deleted)
-
-    # Filter by tenant
-    return [doc for doc in documents if doc.tenant_id == tenant.id]
+    return await repo.get_by_subject(subject_id, tenant.id, include_deleted)
 
 
 @router.get("/event/{event_id}", response_model=List[DocumentResponse])
@@ -83,10 +80,7 @@ async def get_documents_by_event(
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
     """Get all documents for an event"""
-    documents = await repo.get_by_event(event_id)
-
-    # Filter by tenant
-    return [doc for doc in documents if doc.tenant_id == tenant.id]
+    return await repo.get_by_event(event_id, tenant.id)
 
 
 @router.get("/{document_id}/versions", response_model=List[DocumentResponse])
@@ -102,15 +96,14 @@ async def get_document_versions(
     if not document or document.tenant_id != tenant.id:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    versions = await repo.get_versions(document_id)
-    return versions
+    return await repo.get_versions(document_id, tenant.id)
 
 
 @router.put("/{document_id}", response_model=DocumentResponse)
 async def update_document(
     document_id: str,
     data: DocumentUpdate,
-    repo: Annotated[DocumentRepository, Depends(get_document_repo)],
+    repo: Annotated[DocumentRepository, Depends(get_document_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
     """Update document metadata"""
@@ -132,7 +125,7 @@ async def update_document(
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: str,
-    repo: Annotated[DocumentRepository, Depends(get_document_repo)],
+    repo: Annotated[DocumentRepository, Depends(get_document_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
     """Soft delete a document"""

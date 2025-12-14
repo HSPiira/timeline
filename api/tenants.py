@@ -1,6 +1,6 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, status, HTTPException
-from api.deps import get_tenant_repo
+from api.deps import get_tenant_repo, get_tenant_repo_transactional
 from schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
 from repositories.tenant_repo import TenantRepository
 from core.enums import TenantStatus
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     data: TenantCreate,
-    repo: Annotated[TenantRepository, Depends(get_tenant_repo)]
+    repo: Annotated[TenantRepository, Depends(get_tenant_repo_transactional)]
 ):
     """Create a new tenant"""
     from models.tenant import Tenant
@@ -67,7 +67,7 @@ async def list_tenants(
 async def update_tenant(
     tenant_id: str,
     data: TenantUpdate,
-    repo: Annotated[TenantRepository, Depends(get_tenant_repo)]
+    repo: Annotated[TenantRepository, Depends(get_tenant_repo_transactional)]
 ):
     """Update a tenant"""
     tenant = await repo.get_by_id(tenant_id)
@@ -89,7 +89,7 @@ async def update_tenant(
 async def update_tenant_status(
     tenant_id: str,
     new_status: TenantStatus,
-    repo: Annotated[TenantRepository, Depends(get_tenant_repo)]
+    repo: Annotated[TenantRepository, Depends(get_tenant_repo_transactional)]
 ):
     """Update tenant status (activate, suspend, archive)"""
     updated = await repo.update_status(tenant_id, new_status)
@@ -103,7 +103,7 @@ async def update_tenant_status(
 @router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tenant(
     tenant_id: str,
-    repo: Annotated[TenantRepository, Depends(get_tenant_repo)]
+    repo: Annotated[TenantRepository, Depends(get_tenant_repo_transactional)]
 ):
     """Delete a tenant (soft delete by archiving)"""
     updated = await repo.update_status(tenant_id, TenantStatus.ARCHIVED)

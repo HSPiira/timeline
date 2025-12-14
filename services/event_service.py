@@ -11,8 +11,8 @@ class EventService:
 
     async def create_event(self, tenant_id: str, data: EventCreate):
         """Create a new event with cryptographic chaining"""
-        # Get previous hash for this subject
-        prev_hash = await self.event_repo.get_last_hash(data.subject_id)
+        # Get previous hash for this subject within the tenant
+        prev_hash = await self.event_repo.get_last_hash(data.subject_id, tenant_id)
 
         # Compute event hash
         event_hash = self.hash_service.compute_hash(

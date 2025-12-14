@@ -28,12 +28,27 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base()
 
 async def get_db():
+    """
+    Database session dependency for read operations.
+    Does not commit - read-only operations don't need commits.
+    Write operations should use get_db_transactional().
+
+    Note: async with context manager handles session cleanup automatically.
+    """
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+        yield session
+
+
+async def get_db_transactional():
+    """
+    Database session dependency for write operations.
+    Uses async_sessionmaker.begin() for atomic transaction management:
+    - Begins transaction automatically
+    - Commits on success
+    - Rolls back on exception
+    - Closes session automatically
+
+    Use this for POST, PUT, PATCH, DELETE endpoints.
+    """
+    async with AsyncSessionLocal.begin() as session:
+        yield session

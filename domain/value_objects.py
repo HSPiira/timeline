@@ -82,6 +82,3 @@ class EventChain:
             return True
         return self.previous_hash is not None
 
-
-# TenantStatus enum moved to core.enums
-# Import it from there: from core.enums import TenantStatus

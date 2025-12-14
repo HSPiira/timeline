@@ -17,7 +17,7 @@ class SubjectCreate(BaseModel):
             raise ValueError(
                 "Subject type must contain only alphanumeric characters and underscores"
             )
-        return v.upper()
+        return v.lower()  # Consistent with event_type convention
 
 
 class SubjectUpdate(BaseModel):

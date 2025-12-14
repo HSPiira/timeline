@@ -13,9 +13,8 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan events for database initialization"""
-    # Startup: create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Database schema is managed by Alembic migrations
+    # Run migrations: alembic upgrade head
 
     yield
 
@@ -31,9 +30,10 @@ app = FastAPI(
 )
 
 # CORS middleware
+# Security: Using allow_credentials=True requires specific origins (not wildcard)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure from settings in production
+    allow_origins=[origin.strip() for origin in settings.allowed_origins.split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

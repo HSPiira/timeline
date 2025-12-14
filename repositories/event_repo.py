@@ -9,11 +9,12 @@ class EventRepository(BaseRepository[Event]):
     def __init__(self, db: AsyncSession):
         super().__init__(db, Event)
 
-    async def get_last_hash(self, subject_id: str) -> str | None:
-        """Get the hash of the most recent event for a subject"""
+    async def get_last_hash(self, subject_id: str, tenant_id: str) -> str | None:
+        """Get the hash of the most recent event for a subject within a tenant"""
         result = await self.db.execute(
             select(Event.hash)
             .where(Event.subject_id == subject_id)
+            .where(Event.tenant_id == tenant_id)
             .order_by(desc(Event.event_time))
             .limit(1)
         )
@@ -38,11 +39,12 @@ class EventRepository(BaseRepository[Event]):
         )
         return await self.create(event)
 
-    async def get_by_subject(self, subject_id: str) -> list[Event]:
-        """Get all events for a subject, ordered chronologically"""
+    async def get_by_subject(self, subject_id: str, tenant_id: str) -> list[Event]:
+        """Get all events for a subject within a tenant, ordered chronologically"""
         result = await self.db.execute(
             select(Event)
             .where(Event.subject_id == subject_id)
+            .where(Event.tenant_id == tenant_id)
             .order_by(Event.event_time)
         )
         return list(result.scalars().all())

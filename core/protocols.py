@@ -23,8 +23,8 @@ class IHashService(Protocol):
 class IEventRepository(Protocol):
     """Protocol for event repository (DIP)"""
 
-    async def get_last_hash(self, subject_id: str) -> Optional[str]:
-        """Get the hash of the most recent event for a subject"""
+    async def get_last_hash(self, subject_id: str, tenant_id: str) -> Optional[str]:
+        """Get the hash of the most recent event for a subject within a tenant"""
         ...
 
     async def create_event(
@@ -41,8 +41,8 @@ class IEventRepository(Protocol):
         """Get event by ID"""
         ...
 
-    async def get_by_subject(self, subject_id: str) -> List[Event]:
-        """Get all events for a subject"""
+    async def get_by_subject(self, subject_id: str, tenant_id: str) -> List[Event]:
+        """Get all events for a subject within a tenant"""
         ...
 
 

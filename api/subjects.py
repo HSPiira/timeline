@@ -1,7 +1,7 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, status, HTTPException
 from models.tenant import Tenant
-from api.deps import get_current_tenant, get_subject_repo
+from api.deps import get_current_tenant, get_subject_repo, get_subject_repo_transactional
 from schemas.subject import SubjectCreate, SubjectUpdate, SubjectResponse
 from repositories.subject_repo import SubjectRepository
 
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.post("/", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_subject(
     data: SubjectCreate,
-    repo: Annotated[SubjectRepository, Depends(get_subject_repo)],
+    repo: Annotated[SubjectRepository, Depends(get_subject_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
     """Create a new subject"""
@@ -62,7 +62,7 @@ async def list_subjects(
 async def update_subject(
     subject_id: str,
     data: SubjectUpdate,
-    repo: Annotated[SubjectRepository, Depends(get_subject_repo)],
+    repo: Annotated[SubjectRepository, Depends(get_subject_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
     """Update a subject"""
@@ -81,7 +81,7 @@ async def update_subject(
 @router.delete("/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_subject(
     subject_id: str,
-    repo: Annotated[SubjectRepository, Depends(get_subject_repo)],
+    repo: Annotated[SubjectRepository, Depends(get_subject_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
     """Delete a subject"""

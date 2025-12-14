@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
+    # CORS - comma-separated list of allowed origins
+    allowed_origins: str = "http://localhost:3000,http://localhost:8080"
+
     # Storage
     s3_bucket: str
     s3_region: str = "us-east-1"
@@ -31,6 +34,6 @@ class Settings(BaseSettings):
     )
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

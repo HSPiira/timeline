@@ -11,9 +11,14 @@ class DocumentRepository(BaseRepository[Document]):
     def __init__(self, db: AsyncSession):
         super().__init__(db, Document)
 
-    async def get_by_subject(self, subject_id: str, include_deleted: bool = False) -> List[Document]:
-        """Get all documents for a subject"""
-        query = select(Document).where(Document.subject_id == subject_id)
+    async def get_by_subject(self, subject_id: str, tenant_id: str, include_deleted: bool = False) -> List[Document]:
+        """Get all documents for a subject within a tenant"""
+        query = select(Document).where(
+            and_(
+                Document.subject_id == subject_id,
+                Document.tenant_id == tenant_id
+            )
+        )
 
         if not include_deleted:
             query = query.where(Document.deleted_at.is_(None))
@@ -23,13 +28,14 @@ class DocumentRepository(BaseRepository[Document]):
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def get_by_event(self, event_id: str) -> List[Document]:
-        """Get all documents linked to an event"""
+    async def get_by_event(self, event_id: str, tenant_id: str) -> List[Document]:
+        """Get all documents linked to an event within a tenant"""
         result = await self.db.execute(
             select(Document)
             .where(
                 and_(
                     Document.event_id == event_id,
+                    Document.tenant_id == tenant_id,
                     Document.deleted_at.is_(None)
                 )
             )
@@ -51,12 +57,15 @@ class DocumentRepository(BaseRepository[Document]):
         )
         return result.scalar_one_or_none()
 
-    async def get_versions(self, document_id: str) -> List[Document]:
-        """Get all versions of a document"""
+    async def get_versions(self, document_id: str, tenant_id: str) -> List[Document]:
+        """Get all versions of a document within a tenant"""
         result = await self.db.execute(
             select(Document)
             .where(
-                Document.parent_document_id == document_id
+                and_(
+                    Document.parent_document_id == document_id,
+                    Document.tenant_id == tenant_id
+                )
             )
             .order_by(Document.version.asc())
         )

@@ -18,7 +18,7 @@ class EventCreate(BaseModel):
             raise ValueError(
                 "Event type must contain only alphanumeric characters and underscores"
             )
-        return v.upper()
+        return v.lower()  # Consistent with domain value objects convention
 
     @field_validator('event_time')
     @classmethod
