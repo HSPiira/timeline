@@ -38,5 +38,5 @@ class Document(Base):
     __table_args__ = (
         Index('ix_document_tenant_subject', 'tenant_id', 'subject_id'),
         Index('ix_document_checksum_unique', 'tenant_id', 'checksum', unique=True),
-        Index('ix_document_versions', 'parent_document_id', 'version'),
+        Index('ux_document_versions', 'tenant_id', 'subject_id', 'parent_document_id', 'version' , unique=True),
     )

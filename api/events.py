@@ -14,6 +14,6 @@ async def create_event(
     event: EventCreate,
     service: Annotated[EventService, Depends(get_event_service_transactional)],
     tenant: Tenant = Depends(get_current_tenant)
-):
+) -> EventResponse:
     """Create a new event with cryptographic chaining"""
     return await service.create_event(tenant.id, event)

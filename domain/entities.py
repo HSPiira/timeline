@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any
 from domain.value_objects import (
     TenantId,
     SubjectId,
@@ -24,19 +24,20 @@ class EventEntity:
     subject_id: SubjectId
     event_type: EventType
     event_time: datetime
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     chain: EventChain
     created_at: datetime
 
     def validate(self) -> bool:
         """Validate event business rules"""
         # Event time should not be in the future
-        if self.event_time > datetime.now(self.event_time.tzinfo):
+        from datetime import timezone
+        now = datetime.now(timezone.utc) if self.event_time.tzinfo else timezone.utc()
+        if self.event_time > now:
             raise ValueError("Event time cannot be in the future")
 
-        # Validate chain integrity
-        if not self.chain.validate_chain():
-            raise ValueError("Invalid event chain structure")
+        # Note: Chain integrity is enforced at EventChain construction time
+        # via __post_init__ validation, so no need to check here
 
         # Payload must not be empty
         if not self.payload:

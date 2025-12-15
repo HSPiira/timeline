@@ -1,9 +1,17 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, status, HTTPException
 from models.tenant import Tenant
-from api.deps import get_current_tenant, get_document_repo, get_document_repo_transactional
+from api.deps import (
+    get_current_tenant,
+    get_document_repo,
+    get_document_repo_transactional,
+    get_subject_repo,
+    get_event_repo
+)
 from schemas.document import DocumentCreate, DocumentUpdate, DocumentResponse
 from repositories.document_repo import DocumentRepository
+from repositories.subject_repo import SubjectRepository
+from repositories.event_repo import EventRepository
 
 
 router = APIRouter()
@@ -13,16 +21,40 @@ router = APIRouter()
 async def create_document(
     data: DocumentCreate,
     repo: Annotated[DocumentRepository, Depends(get_document_repo_transactional)],
+    subject_repo: Annotated[SubjectRepository, Depends(get_subject_repo)],
+    event_repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
 ):
-    """Create a new document"""
+    """
+    Create a new document.
+
+    Security: Validates that subject_id and event_id (if provided) belong to
+    the current tenant to prevent cross-tenant reference attacks.
+    """
     from models.document import Document
+
+    # Validate subject_id belongs to tenant (prevents cross-tenant reference)
+    subject = await subject_repo.get_by_id_and_tenant(data.subject_id, tenant.id)
+    if not subject:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Subject '{data.subject_id}' not found or does not belong to your tenant"
+        )
+
+    # Validate event_id belongs to tenant if provided (prevents cross-tenant reference)
+    if data.event_id:
+        event = await event_repo.get_by_id_and_tenant(data.event_id, tenant.id)
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event '{data.event_id}' not found or does not belong to your tenant"
+            )
 
     # Check for duplicate (same checksum)
     existing = await repo.get_by_checksum(tenant.id, data.checksum)
     if existing:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Document with same content already exists (ID: {existing.id})"
         )
 
@@ -42,24 +74,6 @@ async def create_document(
 
     created = await repo.create(document)
     return created
-
-
-@router.get("/{document_id}", response_model=DocumentResponse)
-async def get_document(
-    document_id: str,
-    repo: Annotated[DocumentRepository, Depends(get_document_repo)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
-):
-    """Get a document by ID"""
-    document = await repo.get_by_id(document_id)
-
-    if not document or document.tenant_id != tenant.id:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    if document.deleted_at:
-        raise HTTPException(status_code=410, detail="Document has been deleted")
-
-    return document
 
 
 @router.get("/subject/{subject_id}", response_model=List[DocumentResponse])
@@ -97,6 +111,24 @@ async def get_document_versions(
         raise HTTPException(status_code=404, detail="Document not found")
 
     return await repo.get_versions(document_id, tenant.id)
+
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(
+    document_id: str,
+    repo: Annotated[DocumentRepository, Depends(get_document_repo)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+):
+    """Get a document by ID"""
+    document = await repo.get_by_id(document_id)
+
+    if not document or document.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if document.deleted_at:
+        raise HTTPException(status_code=410, detail="Document has been deleted")
+
+    return document
 
 
 @router.put("/{document_id}", response_model=DocumentResponse)

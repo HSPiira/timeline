@@ -1,4 +1,4 @@
-from typing import Protocol, Optional, List
+from typing import Protocol, Optional
 from datetime import datetime
 from models.event import Event
 from schemas.event import EventCreate
@@ -41,7 +41,7 @@ class IEventRepository(Protocol):
         """Get event by ID"""
         ...
 
-    async def get_by_subject(self, subject_id: str, tenant_id: str) -> List[Event]:
+    async def get_by_subject(self, subject_id: str, tenant_id: str) -> list[Event]:
         """Get all events for a subject within a tenant"""
         ...
 

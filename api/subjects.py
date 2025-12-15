@@ -53,7 +53,7 @@ async def list_subjects(
 ):
     """List all subjects for the tenant"""
     if subject_type:
-        return await repo.get_by_type(tenant.id, subject_type)
+        return await repo.get_by_type(tenant.id, subject_type, skip, limit)
 
     return await repo.get_by_tenant(tenant.id, skip, limit)
 

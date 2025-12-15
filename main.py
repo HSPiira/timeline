@@ -1,11 +1,10 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
-from core.database import engine, Base
-from api import events, subjects, tenants, documents
+from core.database import engine
+from api import auth, events, subjects, tenants, documents
 
 settings = get_settings()
 
@@ -40,6 +39,7 @@ app.add_middleware(
 )
 
 # Routers
+app.include_router(auth.router, prefix="/auth", tags=["authentication"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
 app.include_router(events.router, prefix="/events", tags=["events"])

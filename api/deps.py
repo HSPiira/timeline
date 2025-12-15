@@ -1,7 +1,9 @@
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db, get_db_transactional
+from core.auth import verify_token
 from models.tenant import Tenant
 from repositories.tenant_repo import TenantRepository
 from repositories.event_repo import EventRepository
@@ -9,15 +11,50 @@ from repositories.subject_repo import SubjectRepository
 from repositories.document_repo import DocumentRepository
 from services.event_service import EventService
 from services.hash_service import HashService
+from schemas.token import TokenPayload
+
+security = HTTPBearer()
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> TokenPayload:
+    """
+    Validate JWT token and return authenticated user payload.
+    Token must contain 'sub' (user_id) and 'tenant_id' claims.
+    """
+    try:
+        payload = verify_token(credentials.credentials)
+        token_data = TokenPayload(**payload)
+        return token_data
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid authentication credentials: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 async def get_current_tenant(
-    x_tenant_id: str = Header(..., alias="x-tenant-id"),
+    user: TokenPayload = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ) -> Tenant:
-    tenant = await TenantRepository(db).get_by_id(x_tenant_id)
+    """
+    Get current tenant from authenticated user's token claims.
+    Tenant ID is derived from JWT token, preventing header spoofing attacks.
+    """
+    tenant = await TenantRepository(db).get_by_id(user.tenant_id)
     if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant not found or access denied"
+        )
     return tenant
 
 
@@ -36,6 +73,13 @@ async def get_subject_repo(
 ) -> SubjectRepository:
     """Subject repository dependency"""
     return SubjectRepository(db)
+
+
+async def get_event_repo(
+    db: AsyncSession = Depends(get_db)
+) -> EventRepository:
+    """Event repository dependency"""
+    return EventRepository(db)
 
 
 async def get_tenant_repo(

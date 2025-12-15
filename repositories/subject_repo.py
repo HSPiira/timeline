@@ -43,3 +43,14 @@ class SubjectRepository(BaseRepository[Subject]):
             )
         )
         return result.scalar_one_or_none()
+
+    async def get_by_id_and_tenant(self, subject_id: str, tenant_id: str) -> Optional[Subject]:
+        """Get subject by ID and verify it belongs to the tenant"""
+        result = await self.db.execute(
+            select(Subject)
+            .where(
+                Subject.id == subject_id,
+                Subject.tenant_id == tenant_id
+            )
+        )
+        return result.scalar_one_or_none()

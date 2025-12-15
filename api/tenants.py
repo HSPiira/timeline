@@ -1,7 +1,8 @@
-from typing import Annotated, List
+from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException
+from sqlalchemy.exc import IntegrityError
 from api.deps import get_tenant_repo, get_tenant_repo_transactional
-from schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
+from schemas.tenant import TenantCreate, TenantUpdate, TenantResponse, TenantStatusUpdate
 from repositories.tenant_repo import TenantRepository
 from core.enums import TenantStatus
 
@@ -14,25 +15,28 @@ async def create_tenant(
     data: TenantCreate,
     repo: Annotated[TenantRepository, Depends(get_tenant_repo_transactional)]
 ):
-    """Create a new tenant"""
-    from models.tenant import Tenant
+    """
+    Create a new tenant.
 
-    # Check if code already exists
-    existing = await repo.get_by_code(data.code)
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Tenant with code '{data.code}' already exists"
-        )
+    Uses atomic database constraint for race-free uniqueness checking.
+    """
+    from models.tenant import Tenant
 
     tenant = Tenant(
         code=data.code,
         name=data.name,
-        status=data.status
+        status=data.status.value  # Store enum value, not enum object
     )
 
-    created = await repo.create(tenant)
-    return created
+    try:
+        created = await repo.create(tenant)
+        return created
+    except IntegrityError:
+        # Database constraint violation (duplicate code)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tenant with code '{data.code}' already exists"
+        )
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)
@@ -49,14 +53,15 @@ async def get_tenant(
     return tenant
 
 
-@router.get("/", response_model=List[TenantResponse])
+@router.get("/", response_model=list[TenantResponse])
 async def list_tenants(
     repo: Annotated[TenantRepository, Depends(get_tenant_repo)],
     skip: int = 0,
     limit: int = 100,
+    *,
     active_only: bool = False
 ):
-    """List all tenants"""
+    """List all tenants with optional filtering by status"""
     if active_only:
         return await repo.get_active_tenants(skip, limit)
 
@@ -79,7 +84,7 @@ async def update_tenant(
         tenant.name = data.name
 
     if data.status is not None:
-        tenant.status = data.status
+        tenant.status = data.status.value
 
     updated = await repo.update(tenant)
     return updated
@@ -88,11 +93,15 @@ async def update_tenant(
 @router.patch("/{tenant_id}/status", response_model=TenantResponse)
 async def update_tenant_status(
     tenant_id: str,
-    new_status: TenantStatus,
+    data: TenantStatusUpdate,
     repo: Annotated[TenantRepository, Depends(get_tenant_repo_transactional)]
 ):
-    """Update tenant status (activate, suspend, archive)"""
-    updated = await repo.update_status(tenant_id, new_status)
+    """
+    Update tenant status (activate, suspend, archive).
+
+    Request body: {"new_status": "active"|"suspended"|"archived"}
+    """
+    updated = await repo.update_status(tenant_id, data.new_status)
 
     if not updated:
         raise HTTPException(status_code=404, detail="Tenant not found")

@@ -17,6 +17,11 @@ class TenantUpdate(BaseModel):
     status: Optional[TenantStatus] = None
 
 
+class TenantStatusUpdate(BaseModel):
+    """Schema for updating tenant status"""
+    new_status: TenantStatus
+
+
 class TenantResponse(BaseModel):
     """Schema for tenant responses"""
     id: str

@@ -71,3 +71,14 @@ class EventRepository(BaseRepository[Event]):
             .order_by(Event.event_time.desc())
         )
         return list(result.scalars().all())
+
+    async def get_by_id_and_tenant(self, event_id: str, tenant_id: str) -> Event | None:
+        """Get event by ID and verify it belongs to the tenant"""
+        result = await self.db.execute(
+            select(Event)
+            .where(
+                Event.id == event_id,
+                Event.tenant_id == tenant_id
+            )
+        )
+        return result.scalar_one_or_none()
