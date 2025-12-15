@@ -30,7 +30,7 @@ async def register_user(
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tenant with code '{data.tenant_code}' not found"
+            detail="Invalid tenant code"
         )
 
     if tenant.status != "active":
@@ -52,12 +52,12 @@ async def register_user(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Username '{data.username}' already exists in this tenant"
-            )
+            ) from None
         elif "uq_tenant_email" in str(e):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Email '{data.email}' is already registered in this tenant"
-            )
+            ) from None
         raise
 
 
@@ -95,7 +95,8 @@ async def update_current_user(
             user.email = data.email
 
         if data.password:
-            await user_repo.update_password(user.id, data.password)
+            from core.auth import get_password_hash
+            user.hashed_password = get_password_hash(data.password)
 
         updated = await user_repo.update(user)
         return UserResponse.from_orm_model(updated)
@@ -103,7 +104,7 @@ async def update_current_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Email '{data.email}' is already registered in this tenant"
-        )
+        ) from None
 
 
 @router.get("/", response_model=list[UserResponse])
@@ -125,4 +126,9 @@ async def deactivate_current_user(
     user_repo: Annotated[UserRepository, Depends(get_user_repo_transactional)]
 ):
     """Deactivate current user account (soft delete)"""
-    await user_repo.deactivate(current_user.sub)
+    result = await user_repo.deactivate(current_user.sub)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )

@@ -1,3 +1,4 @@
+import asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -45,6 +46,8 @@ class UserRepository(BaseRepository[User]):
         user = await self.get_by_username_and_tenant(username, tenant_id)
 
         if not user:
+            # Perform dummy hash check to prevent timing attacks
+            verify_password(password, "$2b$12$dummy.hash.to.prevent.timing.attacks")
             return None
 
         if user.is_active != "true":
@@ -59,11 +62,12 @@ class UserRepository(BaseRepository[User]):
         self, tenant_id: str, username: str, email: str, password: str
     ) -> User:
         """Create a new user with hashed password"""
+        hashed = await asyncio.to_thread(get_password_hash, password) 
         user = User(
             tenant_id=tenant_id,
             username=username,
             email=email,
-            hashed_password=get_password_hash(password),
+            hashed_password=hashed,
             is_active="true"
         )
         return await self.create(user)

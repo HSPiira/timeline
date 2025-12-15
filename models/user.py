@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy import Boolean, Column, String, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.sql import func
 from core.database import Base
 import uuid
@@ -13,7 +13,7 @@ class User(Base):
     username = Column(String, nullable=False)
     email = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
-    is_active = Column(String, nullable=False, default="true")
+    is_active = Column(Boolean, nullable=False, default=True) 
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

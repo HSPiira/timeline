@@ -45,7 +45,7 @@ class EventRepository(BaseRepository[Event]):
             select(Event)
             .where(Event.subject_id == subject_id)
             .where(Event.tenant_id == tenant_id)
-            .order_by(Event.event_time)
+            .order_by(Event.event_time.desc())
             .offset(skip)
             .limit(limit)
         )

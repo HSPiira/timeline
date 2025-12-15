@@ -11,9 +11,16 @@ Register a user account and start tracking events:
 ```python
 import httpx
 
+# Create a tenant first
+tenant = httpx.post("http://localhost:8000/tenants/", json={
+    "code": "acme-corp",  # lowercase, 3-15 chars, alphanumeric with optional hyphens
+    "name": "ACME Corporation",
+    "status": "active"
+}).json()
+
 # Register a new user account
 user = httpx.post("http://localhost:8000/users/register", json={
-    "tenant_code": "acme-corp",  # lowercase, 3-15 chars, alphanumeric with optional hyphens
+    "tenant_code": "acme-corp",  # must match existing tenant code
     "username": "alice",
     "email": "alice@example.com",
     "password": "securepass123"  # min 8 characters

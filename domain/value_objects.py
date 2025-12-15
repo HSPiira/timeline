@@ -33,11 +33,6 @@ class TenantCode:
                 "(e.g., 'acme', 'acme-corp', 'abc123')"
             )
 
-        # Cannot have consecutive hyphens
-        if '--' in self.value:
-            raise ValueError("Tenant code cannot contain consecutive hyphens")
-
-
 @dataclass(frozen=True)
 class TenantId:
     """Value object for Tenant ID (SRP - single validation responsibility)"""

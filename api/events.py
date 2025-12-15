@@ -1,5 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi.params import Query
 from models.tenant import Tenant
 from api.deps import get_current_tenant, get_event_service_transactional, get_event_repo
 from schemas.event import EventCreate, EventResponse
@@ -40,8 +41,8 @@ async def get_subject_timeline(
     subject_id: str,
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    skip: int = 0,
-    limit: int = 100
+    skip: int = Query(0, ge=0, description="Number of records to skip"),  
+    limit: int = Query(100, ge=1, le=1000, description="Max records to return")
 ):
     """Get all events for a subject (timeline)"""
     events = await repo.get_by_subject(subject_id, tenant.id, skip, limit)
@@ -52,8 +53,8 @@ async def get_subject_timeline(
 async def list_events(
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),  
+    limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
     *,
     event_type: str | None = None
 ):
