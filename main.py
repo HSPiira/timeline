@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
 from core.database import engine
-from api import auth, events, subjects, tenants, documents
+from api import auth, events, subjects, tenants, documents, users
 
 settings = get_settings()
 
@@ -40,6 +40,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(auth.router, prefix="/auth", tags=["authentication"])
+app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
 app.include_router(events.router, prefix="/events", tags=["events"])

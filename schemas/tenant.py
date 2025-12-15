@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from typing import Optional
 from core.enums import TenantStatus
+from domain.value_objects import TenantCode
 
 
 class TenantCreate(BaseModel):
@@ -9,6 +10,13 @@ class TenantCreate(BaseModel):
     code: str
     name: str
     status: TenantStatus = TenantStatus.ACTIVE
+
+    @field_validator('code')
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        """Validate tenant code using TenantCode value object"""
+        TenantCode(value=v)  # Raises ValueError if invalid
+        return v
 
 
 class TenantUpdate(BaseModel):

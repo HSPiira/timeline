@@ -6,16 +6,24 @@ Requires Python 3.9+ and PostgreSQL 12+.
 
 ## Getting started
 
-Create a tenant and start tracking events:
+Register a user account and start tracking events:
 
 ```python
 import httpx
 
+# Register a new user account
+user = httpx.post("http://localhost:8000/users/register", json={
+    "tenant_code": "acme-corp",  # lowercase, 3-15 chars, alphanumeric with optional hyphens
+    "username": "alice",
+    "email": "alice@example.com",
+    "password": "securepass123"  # min 8 characters
+}).json()
+
 # Authenticate and get access token
 response = httpx.post("http://localhost:8000/auth/token", json={
-    "username": "admin",
-    "password": "secret",
-    "tenant_code": "ACME"
+    "username": "alice",
+    "password": "securepass123",
+    "tenant_code": "acme-corp"
 })
 token = response.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
@@ -190,16 +198,31 @@ services/          # Application logic
 
 ### Security
 
+**User registration and authentication**:
+- Users register with tenant code, username, email, and password
+- Passwords hashed with bcrypt (salt + hash)
+- Username and email unique within tenant
+- JWT tokens contain user_id and tenant_id claims
+
+**Tenant code requirements**:
+- 3-15 characters
+- Lowercase alphanumeric with optional hyphens
+- Abbreviation-based (e.g., `acme`, `acme-corp`, `abc123`)
+- Immutable once tenant is activated
+
 **JWT-based authentication**: All endpoints require Bearer tokens with embedded tenant claims.
 
 **Tenant isolation enforcement**:
-- Token validation extracts tenant_id
-- Database queries include tenant filters
-- Cross-tenant references are validated and rejected
+- Token validation extracts tenant_id from JWT
+- Database queries automatically filter by tenant
+- Cross-tenant references validated and rejected
+- Attempting to access another tenant's data returns `403 Forbidden`
 
-**Race-free uniqueness**: Database constraints prevent duplicate tenant codes atomically.
+**Race-free uniqueness**: Database constraints prevent duplicate tenant codes and emails atomically.
 
 **Cryptographic integrity**: SHA-256 event chains detect tampering.
+
+**Password security**: Bcrypt hashing with automatic salt generation.
 
 ## Testing
 

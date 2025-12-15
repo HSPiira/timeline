@@ -8,6 +8,7 @@ from core.auth import create_access_token
 from core.config import get_settings
 from core.database import get_db
 from repositories.tenant_repo import TenantRepository
+from repositories.user_repo import UserRepository
 from schemas.token import Token, TokenRequest
 
 router = APIRouter()
@@ -44,19 +45,25 @@ async def login(
             detail="Tenant account is not active"
         )
 
-    # TODO: Validate username/password against user database
-    # For now, this is a simplified implementation that only validates tenant
-    # In production, you should:
-    # 1. Look up user by username
-    # 2. Verify user belongs to the tenant
-    # 3. Verify password hash
-    # 4. Check user is active/enabled
+    # Authenticate user with username, tenant, and password
+    user = await UserRepository(db).authenticate(
+        username=request.username,
+        tenant_id=tenant.id,
+        password=request.password
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Create JWT token with tenant_id claim
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={
-            "sub": request.username,  # User ID (subject)
+            "sub": user.id,            # User ID (subject)
             "tenant_id": tenant.id     # Tenant ID claim - prevents spoofing
         },
         expires_delta=access_token_expires

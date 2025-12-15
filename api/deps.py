@@ -9,6 +9,7 @@ from repositories.tenant_repo import TenantRepository
 from repositories.event_repo import EventRepository
 from repositories.subject_repo import SubjectRepository
 from repositories.document_repo import DocumentRepository
+from repositories.user_repo import UserRepository
 from services.event_service import EventService
 from services.hash_service import HashService
 from schemas.token import TokenPayload
@@ -96,6 +97,13 @@ async def get_document_repo(
     return DocumentRepository(db)
 
 
+async def get_user_repo(
+    db: AsyncSession = Depends(get_db)
+) -> UserRepository:
+    """User repository dependency"""
+    return UserRepository(db)
+
+
 # Transactional dependencies for write operations
 async def get_event_service_transactional(
     db: AsyncSession = Depends(get_db_transactional)
@@ -126,3 +134,10 @@ async def get_document_repo_transactional(
 ) -> DocumentRepository:
     """Document repository dependency with transaction management"""
     return DocumentRepository(db)
+
+
+async def get_user_repo_transactional(
+    db: AsyncSession = Depends(get_db_transactional)
+) -> UserRepository:
+    """User repository dependency with transaction management"""
+    return UserRepository(db)
