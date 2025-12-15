@@ -10,6 +10,7 @@ from repositories.event_repo import EventRepository
 from repositories.subject_repo import SubjectRepository
 from repositories.document_repo import DocumentRepository
 from repositories.user_repo import UserRepository
+from repositories.event_schema_repo import EventSchemaRepository
 from services.event_service import EventService
 from services.hash_service import HashService
 from schemas.token import TokenPayload
@@ -65,7 +66,8 @@ async def get_event_service(
     """Event service dependency"""
     return EventService(
         event_repo=EventRepository(db),
-        hash_service=HashService()
+        hash_service=HashService(),
+        schema_repo=EventSchemaRepository(db)
     )
 
 
@@ -104,6 +106,13 @@ async def get_user_repo(
     return UserRepository(db)
 
 
+async def get_event_schema_repo(
+    db: AsyncSession = Depends(get_db)
+) -> EventSchemaRepository:
+    """Event schema repository dependency"""
+    return EventSchemaRepository(db)
+
+
 # Transactional dependencies for write operations
 async def get_event_service_transactional(
     db: AsyncSession = Depends(get_db_transactional)
@@ -111,7 +120,8 @@ async def get_event_service_transactional(
     """Event service dependency with transaction management"""
     return EventService(
         event_repo=EventRepository(db),
-        hash_service=HashService()
+        hash_service=HashService(),
+        schema_repo=EventSchemaRepository(db)
     )
 
 
@@ -141,3 +151,10 @@ async def get_user_repo_transactional(
 ) -> UserRepository:
     """User repository dependency with transaction management"""
     return UserRepository(db)
+
+
+async def get_event_schema_repo_transactional(
+    db: AsyncSession = Depends(get_db_transactional)
+) -> EventSchemaRepository:
+    """Event schema repository dependency with transaction management"""
+    return EventSchemaRepository(db)
