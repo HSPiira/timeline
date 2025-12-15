@@ -39,13 +39,15 @@ class EventRepository(BaseRepository[Event]):
         )
         return await self.create(event)
 
-    async def get_by_subject(self, subject_id: str, tenant_id: str) -> list[Event]:
+    async def get_by_subject(self, subject_id: str, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Event]:
         """Get all events for a subject within a tenant, ordered chronologically"""
         result = await self.db.execute(
             select(Event)
             .where(Event.subject_id == subject_id)
             .where(Event.tenant_id == tenant_id)
             .order_by(Event.event_time)
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -60,7 +62,7 @@ class EventRepository(BaseRepository[Event]):
         )
         return list(result.scalars().all())
 
-    async def get_by_type(self, tenant_id: str, event_type: str) -> list[Event]:
+    async def get_by_type(self, tenant_id: str, event_type: str, skip: int = 0, limit: int = 100) -> list[Event]:
         """Get all events of a specific type for a tenant"""
         result = await self.db.execute(
             select(Event)
@@ -69,6 +71,8 @@ class EventRepository(BaseRepository[Event]):
                 Event.event_type == event_type
             )
             .order_by(Event.event_time.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
