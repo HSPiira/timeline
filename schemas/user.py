@@ -36,7 +36,7 @@ class UserResponse(BaseModel):
             tenant_id=user.tenant_id,
             username=user.username,
             email=user.email,
-            is_active=user.is_active == "true",  # Convert string to bool
+            is_active=bool(user.is_active),
             created_at=user.created_at,
             updated_at=user.updated_at
         )

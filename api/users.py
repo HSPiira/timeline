@@ -1,5 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi.params import Query
 from sqlalchemy.exc import IntegrityError
 
 from api.deps import (
@@ -9,6 +10,7 @@ from api.deps import (
     get_current_user,
     get_current_tenant
 )
+from core.auth import get_password_hash
 from schemas.user import UserCreate, UserUpdate, UserResponse
 from schemas.token import TokenPayload
 from repositories.user_repo import UserRepository
@@ -95,7 +97,6 @@ async def update_current_user(
             user.email = data.email
 
         if data.password:
-            from core.auth import get_password_hash
             user.hashed_password = get_password_hash(data.password)
 
         updated = await user_repo.update(user)
@@ -112,8 +113,8 @@ async def list_users(
     current_user: Annotated[TokenPayload, Depends(get_current_user)],
     current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
     user_repo: Annotated[UserRepository, Depends(get_user_repo)],
-    skip: int = 0,
-    limit: int = 100
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Max records to return")
 ):
     """List all users in current tenant (authenticated users only)"""
     users = await user_repo.get_users_by_tenant(current_tenant.id, skip, limit)
