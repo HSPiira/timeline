@@ -160,6 +160,44 @@ async def get_event_schema_repo_transactional(
     """Event schema repository dependency with transaction management"""
     return EventSchemaRepository(db)
 
+
+# Storage service dependencies
+async def get_storage_service():
+    """Storage service dependency (singleton pattern)"""
+    from core.config import get_settings
+    from services.storage.factory import StorageFactory
+
+    settings = get_settings()
+    return StorageFactory.create_storage_service(settings)
+
+
+async def get_document_service(
+    storage = Depends(get_storage_service),
+    db: AsyncSession = Depends(get_db)
+):
+    """Document service dependency"""
+    from services.document_service import DocumentService
+
+    return DocumentService(
+        storage_service=storage,
+        document_repo=DocumentRepository(db),
+        tenant_repo=TenantRepository(db)
+    )
+
+
+async def get_document_service_transactional(
+    storage = Depends(get_storage_service),
+    db: AsyncSession = Depends(get_db_transactional)
+):
+    """Document service dependency with transaction"""
+    from services.document_service import DocumentService
+
+    return DocumentService(
+        storage_service=storage,
+        document_repo=DocumentRepository(db),
+        tenant_repo=TenantRepository(db)
+    )
+
 def require_permission(resource: str, action: str):
     """
     Dependency factory for route-level permission checking.

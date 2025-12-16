@@ -10,7 +10,7 @@ alembic>=1.12.1
 
 # Settings & Configuration
 pydantic-settings>=2.1.0
-pydantic[email]>=2.0.0
+pydantic[email]>=2.4.0
 python-dotenv>=1.0.0
 
 # Validation
@@ -28,6 +28,10 @@ cuid2>=2.0.1
 
 # Cloud Storage (S3)
 boto3>=1.29.7
+aioboto3>=12.0.0
+
+# Async File I/O
+aiofiles>=23.2.1
 
 # Email (optional)
 aiosmtplib>=3.0.1

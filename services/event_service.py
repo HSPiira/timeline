@@ -40,7 +40,7 @@ class EventService:
         # Create event with hash
         return await self.event_repo.create_event(tenant_id, data, event_hash, prev_hash)
 
-    async def _validate_payload(self, tenant_id: str, event_type: str, payload: dict):
+    async def _validate_payload(self, tenant_id: str, event_type: str, payload: dict) -> None:
         """Validate event payload against active schema"""
         schema = await self.schema_repo.get_active_schema(tenant_id, event_type)
 
@@ -48,6 +48,6 @@ class EventService:
             try:
                 jsonschema.validate(instance=payload, schema=schema.schema_json)
             except jsonschema.ValidationError as e:
-                raise ValueError(f"Payload validation failed: {e.message}")
+                raise ValueError(f"Payload validation failed: {e.message}") from e
             except jsonschema.SchemaError as e:
-                raise ValueError(f"Invalid schema definition: {e.message}")
+                raise ValueError(f"Invalid schema definition: {e.message}") from e
