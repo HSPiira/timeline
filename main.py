@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
 from core.database import engine
-from api import auth, events, subjects, tenants, documents, users, event_schemas
+from api import auth, events, subjects, tenants, documents, users, event_schemas, roles, permissions, user_roles
 
 settings = get_settings()
 
@@ -46,6 +46,9 @@ app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(event_schemas.router, prefix="/event-schemas", tags=["event-schemas"])
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
+app.include_router(roles.router, prefix="/roles", tags=["roles"])
+app.include_router(permissions.router, prefix="/permissions", tags=["permissions"])
+app.include_router(user_roles.router, prefix="", tags=["user-roles"])
 
 
 @app.get("/")

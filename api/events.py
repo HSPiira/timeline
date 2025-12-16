@@ -54,7 +54,11 @@ async def list_events(
     skip: int = Query(0, ge=0, description="Number of records to skip"),  
     limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
     *,
-    event_type: str | None = None
+    event_type: str | None = Query(
+        None,
+        pattern=r'^[a-z0-9_]+$',
+        description="Event type filter (alphanumeric and underscores only)"
+    )
 ):
     """List all events for the tenant, optionally filtered by event_type"""
     if event_type:

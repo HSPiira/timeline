@@ -11,6 +11,7 @@ from repositories.subject_repo import SubjectRepository
 from repositories.document_repo import DocumentRepository
 from repositories.user_repo import UserRepository
 from repositories.event_schema_repo import EventSchemaRepository
+from services.authz_service import AuthorizationService
 from services.event_service import EventService
 from services.hash_service import HashService
 from schemas.token import TokenPayload
@@ -158,3 +159,43 @@ async def get_event_schema_repo_transactional(
 ) -> EventSchemaRepository:
     """Event schema repository dependency with transaction management"""
     return EventSchemaRepository(db)
+
+def require_permission(resource: str, action: str):
+    """
+    Dependency factory for route-level permission checking.
+    
+    Usage:
+        @router.post("/events/", dependencies=[Depends(require_permission("event", "create"))])
+        async def create_event(...):
+            ...
+    """
+    async def permission_checker(
+        user: TokenPayload = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+    ) -> TokenPayload:
+        authz_service = AuthorizationService(db)
+        
+        has_permission = await authz_service.check_permission(
+            user_id=user.sub,
+            tenant_id=user.tenant_id,
+            resource=resource,
+            action=action
+        )
+        
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {resource}:{action} required"
+            )
+        
+        return user
+    
+    return permission_checker
+
+
+# Alternative: Inject authorization service for complex checks
+async def get_authz_service(
+    db: AsyncSession = Depends(get_db)
+) -> AuthorizationService:
+    """Get authorization service for manual permission checks"""
+    return AuthorizationService(db)

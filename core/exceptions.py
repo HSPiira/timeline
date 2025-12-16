@@ -15,3 +15,7 @@ class EventChainBrokenException(TimelineException):
 class SchemaValidationException(TimelineException):
     """Schema validation failed"""
     pass
+
+class PermissionDeniedError(TimelineException):
+    """Permission denied - user lacks required permission"""
+    pass
