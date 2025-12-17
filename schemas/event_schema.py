@@ -6,7 +6,7 @@ from typing import Any, Dict
 class EventSchemaCreate(BaseModel):
     """Schema for creating an event schema"""
     event_type: str
-    schema_json: Dict[str, Any]
+    schema_definition: Dict[str, Any]
     version: int
 
     @field_validator('event_type')
@@ -27,11 +27,11 @@ class EventSchemaCreate(BaseModel):
             raise ValueError("Schema version must be >= 1")
         return v
 
-    @field_validator('schema_json')
+    @field_validator('schema_definition')
     @classmethod
-    def validate_schema_json(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_schema_definition(cls, v: Dict[str, Any]) -> Dict[str, Any]:
         if not v:
-            raise ValueError("Schema JSON cannot be empty")
+            raise ValueError("Schema definition cannot be empty")
         if 'type' not in v:
             raise ValueError("Schema must have a 'type' field (JSON Schema requirement)")
         return v
@@ -47,7 +47,7 @@ class EventSchemaResponse(BaseModel):
     id: str
     tenant_id: str
     event_type: str
-    schema_json: Dict[str, Any]
+    schema_definition: Dict[str, Any]
     version: int
     is_active: bool
     created_at: datetime

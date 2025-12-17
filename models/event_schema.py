@@ -11,7 +11,7 @@ class EventSchema(Base):
     id = Column(String, primary_key=True, default=generate_cuid)
     tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
     event_type = Column(String, nullable=False, index=True)
-    schema_json = Column(JSON, nullable=False)
+    schema_definition = Column(JSON, nullable=False)
     version = Column(Integer, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
 

@@ -29,7 +29,7 @@ async def create_event_schema(
         schema = EventSchema(
             tenant_id=tenant.id,
             event_type=data.event_type,
-            schema_json=data.schema_json,
+            schema_definition=data.schema_definition,
             version=data.version,
             is_active=True
         )

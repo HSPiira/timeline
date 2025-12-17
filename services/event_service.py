@@ -131,7 +131,7 @@ class EventService:
 
         if schema:
             try:
-                jsonschema.validate(instance=payload, schema=schema.schema_json)
+                jsonschema.validate(instance=payload, schema=schema.schema_definition)
             except jsonschema.ValidationError as e:
                 raise ValueError(f"Payload validation failed: {e.message}") from e
             except jsonschema.SchemaError as e:
