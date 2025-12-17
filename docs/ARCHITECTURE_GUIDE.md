@@ -478,6 +478,394 @@ created_at                # Timestamp
 
 ---
 
+## 8. Email Integration (Universal Multi-Provider)
+
+Timeline includes a universal email integration system that works with **any email provider** (Gmail, Outlook, iCloud, Yahoo, custom IMAP servers) using the same sync code.
+
+### Design Philosophy
+
+**Key Principle**: Timeline core models remain unchanged. Email integration is configuration, not code.
+
+- **No new core Timeline models** - Email activity uses existing `Subject` and `Event` models
+- **Provider abstraction** - Single sync code works for all email providers
+- **Protocol-based design** - Dependency Inversion Principle with `IEmailProvider`
+- **EmailAccount model** - Integration metadata only (NOT a core Timeline model)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│           UniversalEmailSync Service                 │
+│  (Provider-agnostic - same code for all providers)  │
+└────────────────┬────────────────────────────────────┘
+                 │
+         ┌───────┴───────┐
+         │  IEmailProvider│  (Protocol/Interface)
+         └───────┬───────┘
+                 │
+    ┌────────────┼────────────┐
+    │            │            │
+┌───▼───┐  ┌────▼────┐  ┌───▼────┐
+│Gmail  │  │Outlook  │  │  IMAP  │
+│Provider│  │Provider │  │Provider│
+└───────┘  └─────────┘  └────────┘
+ (Gmail     (Microsoft    (iCloud,
+  API)       Graph API)    Yahoo,
+                          Custom)
+```
+
+### Models
+
+#### EmailAccount (Integration Metadata)
+
+**Purpose**: Store email provider configuration and credentials
+
+**Location**: [models/email_account.py](../models/email_account.py)
+
+```python
+class EmailAccount(Base):
+    """Email account configuration (NOT a core Timeline model)"""
+    id: str
+    tenant_id: str
+    subject_id: str  # Links to Subject (subject_type="email_account")
+
+    # Provider configuration
+    provider_type: str  # gmail, outlook, imap, icloud, yahoo
+    email_address: str
+    credentials_encrypted: str  # Fernet encrypted credentials
+    connection_params: JSON  # Provider-specific (IMAP server, etc.)
+
+    # Sync metadata
+    last_sync_at: datetime
+    webhook_id: str  # For Gmail/Outlook push notifications
+    is_active: bool
+```
+
+**Important**: `EmailAccount` is integration metadata, NOT a core Timeline model. The actual email activity is stored as Timeline `Event` records.
+
+### Provider Protocol
+
+**Location**: [integrations/email/protocols.py](../integrations/email/protocols.py)
+
+```python
+@dataclass
+class EmailMessage:
+    """Universal email message (provider-agnostic)"""
+    message_id: str
+    thread_id: Optional[str]
+    from_address: str
+    to_addresses: List[str]
+    subject: str
+    timestamp: datetime
+    labels: List[str]
+    is_read: bool
+    is_starred: bool
+    has_attachments: bool
+    provider_metadata: dict  # Provider-specific extras
+
+class IEmailProvider(Protocol):
+    """Universal email provider interface"""
+    async def connect(config: EmailProviderConfig) -> None
+    async def fetch_messages(since: datetime, limit: int) -> List[EmailMessage]
+    async def setup_webhook(callback_url: str) -> dict
+    @property
+    def supports_webhooks(self) -> bool
+```
+
+### Concrete Providers
+
+#### 1. GmailProvider
+
+**Location**: [integrations/email/providers/gmail_provider.py](../integrations/email/providers/gmail_provider.py)
+
+- **Protocol**: Gmail API
+- **Authentication**: OAuth 2.0
+- **Webhooks**: ✅ Supported (Gmail push notifications)
+- **Incremental Sync**: ✅ Supported
+
+#### 2. OutlookProvider
+
+**Location**: [integrations/email/providers/outlook_provider.py](../integrations/email/providers/outlook_provider.py)
+
+- **Protocol**: Microsoft Graph API
+- **Authentication**: OAuth 2.0 (MSAL)
+- **Webhooks**: ✅ Supported (Graph subscriptions)
+- **Incremental Sync**: ✅ Supported
+
+#### 3. IMAPProvider
+
+**Location**: [integrations/email/providers/imap_provider.py](../integrations/email/providers/imap_provider.py)
+
+- **Protocol**: IMAP (works with iCloud, Yahoo, custom servers)
+- **Authentication**: Username/password
+- **Webhooks**: ❌ Not supported (polling only)
+- **Incremental Sync**: ✅ Supported (SINCE clause)
+
+### Universal Sync Service
+
+**Location**: [integrations/email/sync.py](../integrations/email/sync.py)
+
+**Key Feature**: Same sync code works for ALL providers
+
+```python
+class UniversalEmailSync:
+    async def sync_account(
+        self,
+        email_account: EmailAccount,
+        incremental: bool = True
+    ) -> dict:
+        # 1. Build provider config
+        config = EmailProviderConfig(...)
+
+        # 2. Create provider (Gmail, Outlook, IMAP, etc.)
+        provider = EmailProviderFactory.create_provider(config)
+
+        # 3. Connect to provider
+        await provider.connect(config)
+
+        # 4. Fetch messages (universal across all providers)
+        messages = await provider.fetch_messages(since=..., limit=100)
+
+        # 5. Transform to Timeline events (UNIVERSAL - same for all)
+        for msg in messages:
+            event = EventCreate(
+                subject_id=email_account.subject_id,
+                event_type='email_received',
+                payload={
+                    'message_id': msg.message_id,
+                    'from': msg.from_address,
+                    'to': msg.to_addresses,
+                    'subject': msg.subject,
+                    'is_read': msg.is_read,
+                    # ... provider-agnostic fields
+                }
+            )
+            await event_service.create_event(event)
+```
+
+**Result**: Add new providers without changing sync logic!
+
+### Event Transformation
+
+All email providers transform to the same Timeline events:
+
+#### email_received Event
+
+```json
+{
+  "subject_id": "subj_123",  // Subject with subject_type="email_account"
+  "event_type": "email_received",
+  "event_time": "2025-12-17T10:00:00Z",
+  "payload": {
+    "message_id": "msg_abc",
+    "thread_id": "thread_xyz",
+    "from": "friend@example.com",
+    "to": ["user@example.com"],
+    "subject": "Lunch tomorrow?",
+    "labels": ["INBOX"],
+    "is_read": false,
+    "is_starred": false,
+    "has_attachments": false,
+    "provider": "gmail",
+    "provider_metadata": {
+      "gmail_id": "1234567890",
+      "label_ids": ["INBOX", "UNREAD"]
+    }
+  }
+}
+```
+
+#### Other Event Types
+
+- `email_sent` - When user sends email
+- `email_read` - When email is read
+- `email_archived` - When email is archived
+- `email_starred` - When email is starred
+- `email_deleted` - When email is deleted
+
+### Credential Encryption
+
+**Location**: [integrations/email/encryption.py](../integrations/email/encryption.py)
+
+```python
+class CredentialEncryptor:
+    """Fernet symmetric encryption for credentials"""
+
+    def encrypt(self, credentials: dict) -> str:
+        # Encrypts credentials before database storage
+
+    def decrypt(self, encrypted_str: str) -> dict:
+        # Decrypts credentials for provider connection
+```
+
+### API Endpoints
+
+**Location**: [api/email_accounts.py](../api/email_accounts.py)
+
+```
+POST   /email-accounts/                  # Create email account
+GET    /email-accounts/                  # List email accounts
+GET    /email-accounts/{id}              # Get account details
+PATCH  /email-accounts/{id}              # Update account
+DELETE /email-accounts/{id}              # Deactivate account
+
+POST   /email-accounts/{id}/sync         # Trigger sync
+POST   /email-accounts/{id}/webhook      # Setup webhook (Gmail/Outlook)
+```
+
+### Usage Example
+
+#### 1. Create Email Account (Gmail)
+
+```bash
+POST /email-accounts/
+{
+  "provider_type": "gmail",
+  "email_address": "user@gmail.com",
+  "credentials": {
+    "access_token": "ya29...",
+    "refresh_token": "1//...",
+    "client_id": "xxx.apps.googleusercontent.com",
+    "client_secret": "xxx"
+  }
+}
+```
+
+#### 2. Create Email Account (IMAP - iCloud)
+
+```bash
+POST /email-accounts/
+{
+  "provider_type": "imap",
+  "email_address": "user@icloud.com",
+  "credentials": {
+    "password": "app-specific-password"
+  },
+  "connection_params": {
+    "imap_server": "imap.mail.me.com",
+    "imap_port": 993
+  }
+}
+```
+
+#### 3. Trigger Sync
+
+```bash
+POST /email-accounts/{id}/sync
+{
+  "incremental": true  # Only sync new emails since last_sync_at
+}
+
+# Response
+{
+  "messages_fetched": 42,
+  "events_created": 42,
+  "provider": "gmail",
+  "sync_type": "incremental"
+}
+```
+
+#### 4. Query Email Timeline
+
+```bash
+GET /events/subject/{subject_id}?event_type=email_received
+
+# Returns Timeline events (same as any other Timeline subject)
+[
+  {
+    "event_type": "email_received",
+    "event_time": "2025-12-17T10:00:00Z",
+    "payload": {
+      "from": "friend@example.com",
+      "subject": "Lunch tomorrow?"
+    }
+  }
+]
+```
+
+### Provider Factory
+
+**Location**: [integrations/email/factory.py](../integrations/email/factory.py)
+
+```python
+class EmailProviderFactory:
+    _providers = {
+        'gmail': GmailProvider,
+        'outlook': OutlookProvider,
+        'imap': IMAPProvider,
+        'icloud': IMAPProvider,  # Uses IMAP
+        'yahoo': IMAPProvider,   # Uses IMAP
+    }
+
+    @classmethod
+    def create_provider(cls, config: EmailProviderConfig) -> IEmailProvider:
+        provider_class = cls._providers.get(config.provider_type)
+        return provider_class()
+
+    @classmethod
+    def register_provider(cls, provider_type: str, provider_class: Type):
+        """Add custom providers"""
+        cls._providers[provider_type] = provider_class
+```
+
+### Webhook Support (Real-time Sync)
+
+**Gmail & Outlook**: Support push notifications for real-time sync
+
+```bash
+POST /email-accounts/{id}/webhook
+{
+  "callback_url": "https://timeline.example.com/webhooks/email"
+}
+
+# Gmail: Uses Cloud Pub/Sub
+# Outlook: Uses Microsoft Graph subscriptions
+```
+
+**IMAP**: Polling-based sync (no webhooks)
+
+### Adding New Providers
+
+To add a new email provider (e.g., ProtonMail):
+
+1. **Implement IEmailProvider**:
+```python
+# integrations/email/providers/protonmail_provider.py
+class ProtonMailProvider:
+    async def connect(self, config: EmailProviderConfig) -> None:
+        # ProtonMail-specific connection logic
+
+    async def fetch_messages(...) -> List[EmailMessage]:
+        # Fetch and convert to EmailMessage
+```
+
+2. **Register Provider**:
+```python
+EmailProviderFactory.register_provider('protonmail', ProtonMailProvider)
+```
+
+3. **Done!** - UniversalEmailSync works automatically with new provider
+
+### Security
+
+- **Credentials**: Encrypted using Fernet (symmetric encryption)
+- **OAuth Tokens**: Stored encrypted, refreshed automatically
+- **IMAP Passwords**: Encrypted, recommend app-specific passwords
+- **Tenant Isolation**: All email accounts tenant-scoped
+
+### Implementation Files
+
+- **Protocols**: [integrations/email/protocols.py](../integrations/email/protocols.py)
+- **Providers**: [integrations/email/providers/](../integrations/email/providers/)
+- **Sync Service**: [integrations/email/sync.py](../integrations/email/sync.py)
+- **Factory**: [integrations/email/factory.py](../integrations/email/factory.py)
+- **Encryption**: [integrations/email/encryption.py](../integrations/email/encryption.py)
+- **API**: [api/email_accounts.py](../api/email_accounts.py)
+- **Schemas**: [schemas/email_account.py](../schemas/email_account.py)
+- **Model**: [models/email_account.py](../models/email_account.py)
+
+---
+
 ## How Models Work Together
 
 ### Complete Flow: Insurance Policy Payment
@@ -762,6 +1150,7 @@ Based on the design document ([docs/timeline.md](timeline.md)), here's the curre
 | **Document Storage** | ✅ Complete | Local filesystem storage with S3 abstraction ready |
 | **RBAC System** | ✅ Complete | Roles, permissions, user roles, authorization service |
 | **Workflows** | ✅ Complete | Event-driven automation with triggers and actions |
+| **Email Integration** | ✅ Complete | Universal multi-provider sync (Gmail, Outlook, IMAP) |
 | **Performance Optimization** | ❌ Not Started | Caching, materialized views |
 | **Compliance Features** | ❌ Not Started | GDPR, audit logs, retention policies |
 
@@ -774,8 +1163,9 @@ Based on [docs/progress-report.md](progress-report.md):
 3. ✅ **Chain Verification** - Complete (tamper detection endpoints)
 4. ✅ **Document Storage** - Complete (local storage with S3-ready abstraction)
 5. ✅ **Workflows** - Complete (event-driven automation MVP)
-6. **Performance** - Redis caching + materialized views
-7. **Compliance** - GDPR features (data export, deletion, retention)
+6. ✅ **Email Integration** - Complete (universal multi-provider sync)
+7. **Performance** - Redis caching + materialized views
+8. **Compliance** - GDPR features (data export, deletion, retention)
 
 ---
 
@@ -867,6 +1257,7 @@ Tenant (1) ──< Subject (N)
 Tenant (1) ──< Event (N)
 Tenant (1) ──< EventSchema (N)
 Tenant (1) ──< Document (N)
+Tenant (1) ──< EmailAccount (N)
 
 Subject (1) ──< Event (N)
 Event (1) ──< Document (N)
@@ -896,6 +1287,9 @@ GET    /event-schemas/event-type/{type}/active  # Get active schema
 
 POST   /documents/           # Upload document
 GET    /documents/{id}       # Get document metadata
+
+POST   /email-accounts/      # Create email account
+POST   /email-accounts/{id}/sync  # Trigger sync
 ```
 
 ### File Structure
@@ -909,6 +1303,8 @@ timeline/
 ├── api/            # REST endpoints
 ├── core/           # Config, database, auth
 ├── domain/         # Value objects, entities
+├── integrations/   # Email and external service integrations
+│   └── email/      # Universal email provider system
 ├── alembic/        # Database migrations
 └── docs/           # Documentation (you are here!)
 ```
