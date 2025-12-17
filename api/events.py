@@ -2,9 +2,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.params import Query
 from models.tenant import Tenant
-from api.deps import get_current_tenant, get_event_service_transactional, get_event_repo
+from api.deps import get_current_tenant, get_event_service_transactional, get_event_repo, require_permission
 from schemas.event import EventCreate, EventResponse
+from schemas.verification import ChainVerificationResponse, EventVerificationResult
 from services.event_service import EventService
+from services.verification_service import VerificationService
+from services.hash_service import HashService
 from repositories.event_repo import EventRepository
 
 
@@ -51,7 +54,7 @@ async def get_event(
 async def list_events(
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    skip: int = Query(0, ge=0, description="Number of records to skip"),  
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
     *,
     event_type: str | None = Query(
@@ -65,3 +68,106 @@ async def list_events(
         return await repo.get_by_type(tenant.id, event_type, skip, limit)
 
     return await repo.get_by_tenant(tenant.id, skip, limit)
+
+
+@router.get(
+    "/verify/{subject_id}",
+    response_model=ChainVerificationResponse,
+    dependencies=[Depends(require_permission("event", "read"))]
+)
+async def verify_subject_chain(
+    subject_id: str,
+    repo: Annotated[EventRepository, Depends(get_event_repo)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+):
+    """
+    Verify cryptographic integrity of event chain for a subject.
+
+    Checks:
+    - Hash integrity: recomputed hash matches stored hash
+    - Chain continuity: previous_hash links are valid
+    - Tamper detection: identifies any modifications
+
+    Returns detailed verification report with per-event status.
+    """
+    verification_service = VerificationService(
+        event_repo=repo,
+        hash_service=HashService()
+    )
+
+    result = await verification_service.verify_subject_chain(subject_id, tenant.id)
+
+    # Convert to response schema
+    return ChainVerificationResponse(
+        subject_id=result.subject_id,
+        tenant_id=result.tenant_id,
+        total_events=result.total_events,
+        valid_events=result.valid_events,
+        invalid_events=result.invalid_events,
+        is_chain_valid=result.is_chain_valid,
+        verified_at=result.verified_at,
+        event_results=[
+            EventVerificationResult(
+                event_id=er.event_id,
+                event_type=er.event_type,
+                event_time=er.event_time,
+                sequence=er.sequence,
+                is_valid=er.is_valid,
+                error_type=er.error_type,
+                error_message=er.error_message,
+                expected_hash=er.expected_hash,
+                actual_hash=er.actual_hash
+            )
+            for er in result.event_results
+        ]
+    )
+
+
+@router.get(
+    "/verify/tenant/all",
+    response_model=ChainVerificationResponse,
+    dependencies=[Depends(require_permission("event", "read"))]
+)
+async def verify_tenant_chains(
+    repo: Annotated[EventRepository, Depends(get_event_repo)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
+    limit: int = Query(1000, ge=1, le=10000, description="Max events to verify")
+):
+    """
+    Verify cryptographic integrity of all event chains for current tenant.
+
+    Validates all events across all subjects for tenant.
+    Use limit parameter to control scope (default 1000 events).
+
+    Returns aggregated verification report.
+    """
+    verification_service = VerificationService(
+        event_repo=repo,
+        hash_service=HashService()
+    )
+
+    result = await verification_service.verify_tenant_chains(tenant.id, limit=limit)
+
+    return ChainVerificationResponse(
+        subject_id=result.subject_id,
+        tenant_id=result.tenant_id,
+        total_events=result.total_events,
+        valid_events=result.valid_events,
+        invalid_events=result.invalid_events,
+        is_chain_valid=result.is_chain_valid,
+        verified_at=result.verified_at,
+        event_results=[
+            EventVerificationResult(
+                event_id=er.event_id,
+                event_type=er.event_type,
+                event_time=er.event_time,
+                sequence=er.sequence,
+                is_valid=er.is_valid,
+                error_type=er.error_type,
+                error_message=er.error_message,
+                expected_hash=er.expected_hash,
+                actual_hash=er.actual_hash
+            )
+            for er in result.event_results
+        ]
+    )

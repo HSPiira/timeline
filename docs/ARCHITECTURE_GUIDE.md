@@ -313,6 +313,171 @@ Document: Scanned accident report PDF
 
 ---
 
+### 7. Workflow - Event-Driven Automation
+
+**What it is**: Automated actions triggered when specific events occur
+
+**Why it exists**:
+- **Business process automation** - reduce manual steps and human error
+- **Event-driven architecture** - actions happen automatically based on events
+- **Tenant-configurable** - each tenant defines their own workflows
+- **Audit trail** - all workflow executions are logged for compliance
+- **Conditional logic** - workflows only trigger when conditions are met
+
+**Key Models**:
+
+#### Workflow (Configuration)
+```python
+id                      # Workflow identifier (CUID)
+tenant_id              # Tenant ownership
+name                   # Human-readable name
+description            # What this workflow does
+trigger_event_type     # Event type that triggers this workflow
+trigger_conditions     # Optional JSON conditions (payload field matching)
+actions                # Array of actions to execute
+is_active              # Enable/disable workflow
+execution_order        # Priority when multiple workflows match
+max_executions_per_day # Rate limiting (optional)
+created_at             # Timestamp
+updated_at             # Timestamp
+deleted_at             # Soft delete
+```
+
+#### WorkflowExecution (Audit Trail)
+```python
+id                        # Execution identifier (CUID)
+tenant_id                 # Tenant ownership
+workflow_id               # Which workflow executed
+triggered_by_event_id     # Event that triggered execution
+triggered_by_subject_id   # Subject of triggering event
+status                    # pending | running | completed | failed
+started_at                # Execution start time
+completed_at              # Execution end time
+actions_executed          # Count of successful actions
+actions_failed            # Count of failed actions
+execution_log             # Detailed JSON log of each action
+error_message             # Error if execution failed
+created_at                # Timestamp
+```
+
+**How It Works**:
+
+1. **Workflow Creation**: Tenant configures automated response to events
+   ```json
+   POST /workflows/
+   {
+     "name": "Auto-escalate urgent issues",
+     "trigger_event_type": "issue_created",
+     "trigger_conditions": {
+       "payload.priority": "urgent"
+     },
+     "actions": [
+       {
+         "type": "create_event",
+         "params": {
+           "event_type": "issue_escalated",
+           "payload": {
+             "escalated_by": "workflow",
+             "reason": "auto_urgent"
+           }
+         }
+       }
+     ]
+   }
+   ```
+
+2. **Automatic Triggering**: When matching event is created
+   ```
+   User creates event → EventService.create_event()
+                     ↓
+   Event stored → Hash computed and validated
+                     ↓
+   WorkflowEngine.process_event_triggers()
+                     ↓
+   Find matching workflows (event_type + conditions)
+                     ↓
+   Execute actions (create events, send notifications, etc.)
+                     ↓
+   Log execution results in WorkflowExecution table
+   ```
+
+3. **Condition Evaluation**: Simple payload field matching
+   ```python
+   # Workflow triggers only if payload.priority == "urgent"
+   trigger_conditions = {
+     "payload.priority": "urgent"
+   }
+
+   # No conditions = always trigger for this event type
+   trigger_conditions = None
+   ```
+
+4. **Supported Actions** (MVP):
+   - `create_event`: Creates a new event on the same subject
+   - More action types can be added (notifications, webhooks, etc.)
+
+**Example Workflow Scenarios**:
+
+**Insurance Claims Processing**:
+```json
+{
+  "name": "Auto-assign claims adjuster",
+  "trigger_event_type": "claim_filed",
+  "trigger_conditions": {
+    "payload.claim_type": "accident"
+  },
+  "actions": [{
+    "type": "create_event",
+    "params": {
+      "event_type": "adjuster_assigned",
+      "payload": {
+        "adjuster_id": "auto_pool",
+        "assignment_type": "automatic"
+      }
+    }
+  }]
+}
+```
+
+**HR Onboarding**:
+```json
+{
+  "name": "Start background check",
+  "trigger_event_type": "offer_accepted",
+  "actions": [{
+    "type": "create_event",
+    "params": {
+      "event_type": "background_check_initiated",
+      "payload": {
+        "vendor": "screening_service",
+        "initiated_by": "workflow"
+      }
+    }
+  }]
+}
+```
+
+**Security Features**:
+- **Infinite loop prevention**: Workflow-created events don't trigger workflows by default
+- **Error isolation**: Workflow failures don't fail the original event creation
+- **Rate limiting**: Optional `max_executions_per_day` prevents runaway workflows
+- **Audit trail**: Every execution logged with detailed results
+
+**Integration with Event System**:
+- Workflows trigger **after** event is successfully created
+- EventService → WorkflowEngine (via dependency injection)
+- WorkflowEngine receives EventService reference to create follow-up events
+- All workflow-created events use `trigger_workflows=False` to prevent loops
+
+**Database Models**:
+- [models/workflow.py](../models/workflow.py)
+- [services/workflow_engine.py](../services/workflow_engine.py)
+- [repositories/workflow_repo.py](../repositories/workflow_repo.py)
+
+**API Endpoints**: [api/workflows.py](../api/workflows.py)
+
+---
+
 ## How Models Work Together
 
 ### Complete Flow: Insurance Policy Payment
@@ -591,12 +756,12 @@ Based on the design document ([docs/timeline.md](timeline.md)), here's the curre
 | **User Authentication** | ✅ Complete | JWT, bcrypt, tenant-scoped users |
 | **Subject Management** | ✅ Complete | Subject model, tenant-scoped types |
 | **Event Sourcing** | ✅ Complete | Immutable events, append-only |
-| **Cryptographic Chaining** | ✅ Complete | SHA-256 hashing, chain validation |
+| **Cryptographic Chaining** | ✅ Complete | SHA-256 hashing, chain validation, verification endpoints |
 | **Schema Registry** | ✅ Complete | EventSchema model, JSON Schema validation |
 | **Event GET Endpoints** | ✅ Complete | Query by subject, type, tenant |
-| **Document Model** | ⚠️ Partial | Model exists, S3 integration pending |
-| **RBAC System** | ❌ Not Started | Roles, permissions, access control |
-| **Workflows** | ❌ Not Started | Event-driven automation |
+| **Document Storage** | ✅ Complete | Local filesystem storage with S3 abstraction ready |
+| **RBAC System** | ✅ Complete | Roles, permissions, user roles, authorization service |
+| **Workflows** | ✅ Complete | Event-driven automation with triggers and actions |
 | **Performance Optimization** | ❌ Not Started | Caching, materialized views |
 | **Compliance Features** | ❌ Not Started | GDPR, audit logs, retention policies |
 
@@ -604,11 +769,13 @@ Based on the design document ([docs/timeline.md](timeline.md)), here's the curre
 
 Based on [docs/progress-report.md](progress-report.md):
 
-1. ✅ **Schema Registry** - Complete (just implemented!)
-2. **RBAC** - Granular permissions system
-3. **Document Storage** - S3/MinIO integration
-4. **Performance** - Redis caching + materialized views
-5. **Workflows** - Basic event-driven automation
+1. ✅ **Schema Registry** - Complete
+2. ✅ **RBAC** - Complete (roles, permissions, authorization)
+3. ✅ **Chain Verification** - Complete (tamper detection endpoints)
+4. ✅ **Document Storage** - Complete (local storage with S3-ready abstraction)
+5. ✅ **Workflows** - Complete (event-driven automation MVP)
+6. **Performance** - Redis caching + materialized views
+7. **Compliance** - GDPR features (data export, deletion, retention)
 
 ---
 
@@ -634,18 +801,18 @@ We welcome contributions and ideas! Here's how you can help:
 ### Areas for Contribution
 
 **High Priority**:
-- [ ] RBAC system (roles, permissions, access control)
-- [ ] S3 document storage integration
 - [ ] Redis caching layer
 - [ ] Materialized views for performance
-- [ ] Event-driven workflows
+- [ ] GDPR compliance features (data export, deletion)
+- [ ] S3 document storage backend (abstraction ready)
+- [ ] Workflow action types (notifications, webhooks)
 
 **Medium Priority**:
-- [ ] Chain verification endpoints
-- [ ] GDPR compliance features (data export, deletion)
 - [ ] Audit log enhancements
 - [ ] API rate limiting
 - [ ] OpenAPI documentation improvements
+- [ ] Workflow rate limiting and scheduling
+- [ ] Enhanced chain verification (batch processing)
 
 **Nice to Have**:
 - [ ] GraphQL API layer

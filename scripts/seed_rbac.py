@@ -56,6 +56,12 @@ SYSTEM_PERMISSIONS = [
     ("event_schema:read", "event_schema", "read", "View event schemas"),
     ("event_schema:update", "event_schema", "update", "Update event schemas"),
 
+    # Workflow permissions
+    ("workflow:create", "workflow", "create", "Create workflows"),
+    ("workflow:read", "workflow", "read", "View workflows"),
+    ("workflow:update", "workflow", "update", "Update workflows"),
+    ("workflow:delete", "workflow", "delete", "Delete workflows"),
+
     # Wildcard permissions
     ("*:*", "*", "*", "Super admin - all permissions"),
 ]
@@ -74,7 +80,8 @@ DEFAULT_ROLES = {
         "description": "Can manage events, subjects, and users",
         "permissions": [
             "event:*", "subject:*", "user:read", "user:create",
-            "user:list", "document:*", "event_schema:read"
+            "user:list", "document:*", "event_schema:read",
+            "workflow:*"
         ],
         "is_system": True,
     },

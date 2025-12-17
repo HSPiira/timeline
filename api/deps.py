@@ -65,11 +65,20 @@ async def get_event_service(
     db: AsyncSession = Depends(get_db)
 ) -> EventService:
     """Event service dependency"""
-    return EventService(
-        event_repo=EventRepository(db),
+    from services.workflow_engine import WorkflowEngine
+
+    event_repo = EventRepository(db)
+    event_service = EventService(
+        event_repo=event_repo,
         hash_service=HashService(),
         schema_repo=EventSchemaRepository(db)
     )
+
+    # Add workflow engine
+    workflow_engine = WorkflowEngine(db, event_service)
+    event_service.workflow_engine = workflow_engine
+
+    return event_service
 
 
 async def get_subject_repo(
@@ -119,11 +128,20 @@ async def get_event_service_transactional(
     db: AsyncSession = Depends(get_db_transactional)
 ) -> EventService:
     """Event service dependency with transaction management"""
-    return EventService(
-        event_repo=EventRepository(db),
+    from services.workflow_engine import WorkflowEngine
+
+    event_repo = EventRepository(db)
+    event_service = EventService(
+        event_repo=event_repo,
         hash_service=HashService(),
         schema_repo=EventSchemaRepository(db)
     )
+
+    # Add workflow engine
+    workflow_engine = WorkflowEngine(db, event_service)
+    event_service.workflow_engine = workflow_engine
+
+    return event_service
 
 
 async def get_subject_repo_transactional(

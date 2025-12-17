@@ -6,6 +6,7 @@ from models.document import Document
 from models.event_schema import EventSchema
 from models.role import Role
 from models.persmission import Permission, RolePermission, UserRole
+from models.workflow import Workflow, WorkflowExecution
 
 __all__ = [
     "Tenant",
@@ -17,5 +18,7 @@ __all__ = [
     "Role",
     "Permission",
     "RolePermission",
-    "UserRole"
+    "UserRole",
+    "Workflow",
+    "WorkflowExecution"
 ]

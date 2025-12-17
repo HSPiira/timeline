@@ -4,9 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
 from core.database import engine
-from api import auth, events, subjects, tenants, documents, users, event_schemas, roles, permissions, user_roles
+from core.logging import setup_logging
+from api import auth, events, subjects, tenants, documents, users, event_schemas, roles, permissions, user_roles, workflows
 
 settings = get_settings()
+
+# Initialize logging
+setup_logging()
 
 
 @asynccontextmanager
@@ -49,6 +53,7 @@ app.include_router(documents.router, prefix="/documents", tags=["documents"])
 app.include_router(roles.router, prefix="/roles", tags=["roles"])
 app.include_router(permissions.router, prefix="/permissions", tags=["permissions"])
 app.include_router(user_roles.router, prefix="", tags=["user-roles"])
+app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
 
 
 @app.get("/")
