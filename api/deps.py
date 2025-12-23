@@ -19,6 +19,9 @@ from schemas.token import TokenPayload
 
 security = HTTPBearer()
 
+# Global storage service instance (singleton)
+_storage_service = None
+
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)

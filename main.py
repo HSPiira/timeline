@@ -9,13 +9,12 @@ from api import auth, events, subjects, tenants, documents, users, event_schemas
 
 settings = get_settings()
 
-# Initialize logging
-setup_logging()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan events for database initialization"""
+    # Initialize logging 
+    setup_logging()
+
     # Database schema is managed by Alembic migrations
     # Run migrations: alembic upgrade head
 
