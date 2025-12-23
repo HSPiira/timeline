@@ -9,6 +9,7 @@ from api.deps import (
     get_current_tenant
 )
 from models.tenant import Tenant
+from models.event_schema import EventSchema 
 from schemas.event_schema import EventSchemaCreate, EventSchemaUpdate, EventSchemaResponse
 from repositories.event_schema_repo import EventSchemaRepository
 
@@ -21,11 +22,9 @@ async def create_event_schema(
     data: EventSchemaCreate,
     repo: Annotated[EventSchemaRepository, Depends(get_event_schema_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
-):
+) -> EventSchemaResponse:
     """Create a new event schema for the tenant"""
     try:
-        from models.event_schema import EventSchema
-
         schema = EventSchema(
             tenant_id=tenant.id,
             event_type=data.event_type,
@@ -48,7 +47,7 @@ async def list_event_schemas(
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Max records to return")
-):
+) -> list[EventSchemaResponse]:
     """List all event schemas for the tenant"""
     schemas = await repo.get_all_for_tenant(tenant.id, skip, limit)
     return [EventSchemaResponse.model_validate(schema) for schema in schemas]
@@ -59,7 +58,7 @@ async def get_schemas_for_event_type(
     event_type: str,
     repo: Annotated[EventSchemaRepository, Depends(get_event_schema_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
-):
+) -> list[EventSchemaResponse]:
     """Get all schema versions for a specific event type"""
     schemas = await repo.get_all_for_event_type(tenant.id, event_type)
     if not schemas:
@@ -75,7 +74,7 @@ async def get_active_schema(
     event_type: str,
     repo: Annotated[EventSchemaRepository, Depends(get_event_schema_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
-):
+) -> EventSchemaResponse:
     """Get the active schema for a specific event type"""
     schema = await repo.get_active_schema(tenant.id, event_type)
     if not schema:
@@ -91,7 +90,7 @@ async def get_event_schema(
     schema_id: str,
     repo: Annotated[EventSchemaRepository, Depends(get_event_schema_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
-):
+) -> EventSchemaResponse:
     """Get a specific event schema by ID"""
     schema = await repo.get_by_id(schema_id)
     if not schema or schema.tenant_id != tenant.id:
@@ -108,7 +107,7 @@ async def update_event_schema(
     data: EventSchemaUpdate,
     repo: Annotated[EventSchemaRepository, Depends(get_event_schema_repo_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)]
-):
+) -> EventSchemaResponse:
     """Update an event schema (activate/deactivate)"""
     schema = await repo.get_by_id(schema_id)
     if not schema or schema.tenant_id != tenant.id:
@@ -118,22 +117,14 @@ async def update_event_schema(
         )
 
     if data.is_active is not None:
-        if data.is_active:
-            updated_schema = await repo.activate_schema(schema_id)
-        else:
-            updated_schema = await repo.deactivate_schema(schema_id)
-
-        if not updated_schema:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update schema"
-            )
+        schema.is_active = data.is_active  
+        updated_schema = await repo.update(schema)  
         return EventSchemaResponse.model_validate(updated_schema)
 
     return EventSchemaResponse.model_validate(schema)
 
 
-@router.delete("/{schema_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.patch("/{schema_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event_schema(
     schema_id: str,
     repo: Annotated[EventSchemaRepository, Depends(get_event_schema_repo_transactional)],

@@ -12,6 +12,7 @@ from repositories.document_repo import DocumentRepository
 from repositories.user_repo import UserRepository
 from repositories.event_schema_repo import EventSchemaRepository
 from services.authz_service import AuthorizationService
+from services.document_service import DocumentService
 from services.event_service import EventService
 from services.hash_service import HashService
 from schemas.token import TokenPayload
@@ -181,18 +182,23 @@ async def get_event_schema_repo_transactional(
 
 # Storage service dependencies
 async def get_storage_service():
-    """Storage service dependency (singleton pattern)"""
+    """Storage service dependency"""
+    global _storage_service
+    if _storage_service is not None:
+        return _storage_service
+    
     from core.config import get_settings
     from services.storage.factory import StorageFactory
 
     settings = get_settings()
-    return StorageFactory.create_storage_service(settings)
+    _storage_service = StorageFactory.create_storage_service(settings)
+    return _storage_service
 
 
 async def get_document_service(
     storage = Depends(get_storage_service),
     db: AsyncSession = Depends(get_db)
-):
+) -> "DocumentService":
     """Document service dependency"""
     from services.document_service import DocumentService
 
@@ -206,7 +212,7 @@ async def get_document_service(
 async def get_document_service_transactional(
     storage = Depends(get_storage_service),
     db: AsyncSession = Depends(get_db_transactional)
-):
+) -> "DocumentService":
     """Document service dependency with transaction"""
     from services.document_service import DocumentService
 

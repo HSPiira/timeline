@@ -50,7 +50,7 @@ class UserRepository(BaseRepository[User]):
             verify_password(password, "$2b$12$dummy.hash.to.prevent.timing.attacks")
             return None
 
-        if user.is_active != "true":
+        if not user.is_active:
             return None
 
         if not verify_password(password, user.hashed_password):
@@ -68,7 +68,7 @@ class UserRepository(BaseRepository[User]):
             username=username,
             email=email,
             hashed_password=hashed,
-            is_active="true"
+            is_active=True
         )
         return await self.create(user)
 
