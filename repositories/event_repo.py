@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from models.event import Event
 from schemas.event import EventCreate
 from repositories.base import BaseRepository
@@ -27,11 +27,12 @@ class EventRepository(BaseRepository[Event]):
         event_hash: str,
         previous_hash: str | None
     ) -> Event:
-        """Create a new event with computed hash"""
+        """Create a new event with computed hash and schema version"""
         event = Event(
             tenant_id=tenant_id,
             subject_id=data.subject_id,
             event_type=data.event_type,
+            schema_version=data.schema_version,  # Immutable - tracks which schema was used
             event_time=data.event_time,
             payload=data.payload,
             hash=event_hash,
@@ -86,3 +87,17 @@ class EventRepository(BaseRepository[Event]):
             )
         )
         return result.scalar_one_or_none()
+
+    async def count_by_schema_version(
+        self, tenant_id: str, event_type: str, schema_version: int
+    ) -> int:
+        """Count events using a specific schema version"""
+        result = await self.db.execute(
+            select(func.count(Event.id))
+            .where(
+                Event.tenant_id == tenant_id,
+                Event.event_type == event_type,
+                Event.schema_version == schema_version
+            )
+        )
+        return result.scalar() or 0

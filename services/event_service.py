@@ -64,9 +64,14 @@ class EventService:
                 f"Subject '{event.subject_id}' not found or does not belong to tenant"
             )
 
-        # 2. Get and validate against active schema if one exists
+        # 2. Validate schema_version exists and validate payload against it
         if self.schema_repo:
-            await self._validate_payload(tenant_id, event.event_type, event.payload)
+            await self._validate_payload(
+                tenant_id,
+                event.event_type,
+                event.schema_version,
+                event.payload
+            )
 
         # 3. Get the previous event hash for this subject (for chaining)
         prev_hash = await self.event_repo.get_last_hash(event.subject_id, tenant_id)
@@ -125,14 +130,42 @@ class EventService:
             )
             return []
 
-    async def _validate_payload(self, tenant_id: str, event_type: str, payload: dict) -> None:
-        """Validate event payload against active schema"""
-        schema = await self.schema_repo.get_active_schema(tenant_id, event_type)
+    async def _validate_payload(
+        self,
+        tenant_id: str,
+        event_type: str,
+        schema_version: int,
+        payload: dict
+    ) -> None:
+        """
+        Validate event payload against specific schema version.
 
-        if schema:
-            try:
-                jsonschema.validate(instance=payload, schema=schema.schema_definition)
-            except jsonschema.ValidationError as e:
-                raise ValueError(f"Payload validation failed: {e.message}") from e
-            except jsonschema.SchemaError as e:
-                raise ValueError(f"Invalid schema definition: {e.message}") from e
+        Raises:
+            ValueError: If schema version doesn't exist, is inactive, or validation fails
+        """
+        # Get the specific schema version
+        schema = await self.schema_repo.get_by_version(tenant_id, event_type, schema_version)
+
+        if not schema:
+            raise ValueError(
+                f"Schema version {schema_version} not found for event type '{event_type}'"
+            )
+
+        # Validate that schema is active (only active schemas can be used for new events)
+        if not schema.is_active:
+            raise ValueError(
+                f"Schema version {schema_version} for event type '{event_type}' is not active. "
+                f"Please activate it or use an active version."
+            )
+
+        # Validate payload against schema
+        try:
+            jsonschema.validate(instance=payload, schema=schema.schema_definition)
+        except jsonschema.ValidationError as e:
+            raise ValueError(
+                f"Payload validation failed against schema v{schema_version}: {e.message}"
+            ) from e
+        except jsonschema.SchemaError as e:
+            raise ValueError(
+                f"Invalid schema definition for v{schema_version}: {e.message}"
+            ) from e

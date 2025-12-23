@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from models.event_schema import EventSchema
 from repositories.base import BaseRepository
 from typing import Optional, List
@@ -10,6 +10,20 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
 
     def __init__(self, db: AsyncSession):
         super().__init__(db, EventSchema)
+
+    async def get_next_version(self, tenant_id: str, event_type: str) -> int:
+        """Get the next version number for an event_type (auto-increment)"""
+        result = await self.db.execute(
+            select(func.max(EventSchema.version))
+            .where(
+                and_(
+                    EventSchema.tenant_id == tenant_id,
+                    EventSchema.event_type == event_type
+                )
+            )
+        )
+        max_version = result.scalar()
+        return (max_version or 0) + 1
 
     async def get_active_schema(self, tenant_id: str, event_type: str) -> Optional[EventSchema]:
         """Get active schema for event type and tenant"""
