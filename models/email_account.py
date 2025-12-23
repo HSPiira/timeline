@@ -1,9 +1,9 @@
 """Email account model for integration metadata (NOT a core Timeline model)"""
-import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.sql import func
 from core.database import Base
+from utils.generators import generate_cuid
 
 
 class EmailAccount(Base):
@@ -15,7 +15,7 @@ class EmailAccount(Base):
     """
     __tablename__ = "email_account"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String, primary_key=True, default=generate_cuid)
     tenant_id = Column(String, ForeignKey("tenant.id"), nullable=False, index=True)
     subject_id = Column(String, ForeignKey("subject.id"), nullable=False, index=True)
 

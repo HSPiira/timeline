@@ -1,24 +1,29 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import get_tenant_repo, get_tenant_repo_transactional
-from schemas.tenant import TenantCreate, TenantUpdate, TenantResponse, TenantStatusUpdate
+from core.database import get_db_transactional
+from schemas.tenant import TenantCreate, TenantUpdate, TenantResponse, TenantStatusUpdate, TenantCreateResponse
 from repositories.tenant_repo import TenantRepository
+from repositories.user_repo import UserRepository
+from services.tenant_initialization_service import TenantInitializationService
 from core.enums import TenantStatus
 
 
 router = APIRouter()
 
 
-@router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=TenantCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     data: TenantCreate,
-    repo: Annotated[TenantRepository, Depends(get_tenant_repo_transactional)]
+    db: Annotated[AsyncSession, Depends(get_db_transactional)]
 ):
     """
-    Create a new tenant.
+    Create a new tenant with an admin user in a single transaction.
 
     Uses atomic database constraint for race-free uniqueness checking.
+    Returns tenant details along with admin credentials.
     """
     from models.tenant import Tenant
 
@@ -29,13 +34,42 @@ async def create_tenant(
     )
 
     try:
-        created = await repo.create(tenant)
-        return created
-    except IntegrityError:
-        # Database constraint violation (duplicate code)
+        # Create repositories and services from the same transactional session
+        tenant_repo = TenantRepository(db)
+        user_repo = UserRepository(db)
+        init_service = TenantInitializationService(db)
+
+        # Create tenant
+        created = await tenant_repo.create(tenant)
+
+        # Create admin user for the new tenant in the same transaction
+        admin_username = "admin"
+        admin_password = "admin@123"  # Default password that should be changed on first login
+        admin_email = f"admin@{data.code}.local"
+
+        admin_user = await user_repo.create_user(
+            tenant_id=created.id,
+            username=admin_username,
+            email=admin_email,
+            password=admin_password
+        )
+
+        # Initialize RBAC: create permissions, roles, and assign admin role
+        await init_service.initialize_tenant(
+            tenant_id=created.id,
+            admin_user_id=admin_user.id
+        )
+
+        return TenantCreateResponse(
+            tenant=TenantResponse.model_validate(created),
+            admin_username=admin_username,
+            admin_password=admin_password
+        )
+    except IntegrityError as e:
+        # Database constraint violation (duplicate code or username)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tenant with code '{data.code}' already exists"
+            detail=f"Tenant with code '{data.code}' already exists or admin user creation failed"
         )
 
 

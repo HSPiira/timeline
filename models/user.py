@@ -1,14 +1,14 @@
 from sqlalchemy import Boolean, Column, String, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.sql import func
 from core.database import Base
-import uuid
+from utils.generators import generate_cuid
 
 
 class User(Base):
     """User model for authentication"""
     __tablename__ = "user"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String, primary_key=True, default=generate_cuid)
     tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
     username = Column(String, nullable=False)
     email = Column(String, nullable=False)

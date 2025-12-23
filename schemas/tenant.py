@@ -40,3 +40,12 @@ class TenantResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TenantCreateResponse(BaseModel):
+    """Schema for tenant creation response with admin credentials"""
+    tenant: TenantResponse
+    admin_username: str
+    admin_password: str
+
+    model_config = ConfigDict(from_attributes=True)
