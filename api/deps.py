@@ -65,16 +65,15 @@ async def get_current_tenant(
     return tenant
 
 
-async def get_event_service(
-    db: AsyncSession = Depends(get_db)
-) -> EventService:
-    """Event service dependency"""
+def _build_event_service(db: AsyncSession) -> EventService:
+    """Internal helper to construct EventService with all dependencies"""
     from services.workflow_engine import WorkflowEngine
 
     event_repo = EventRepository(db)
     event_service = EventService(
         event_repo=event_repo,
         hash_service=HashService(),
+        subject_repo=SubjectRepository(db),
         schema_repo=EventSchemaRepository(db)
     )
 
@@ -83,6 +82,13 @@ async def get_event_service(
     event_service.workflow_engine = workflow_engine
 
     return event_service
+
+
+async def get_event_service(
+    db: AsyncSession = Depends(get_db)
+) -> EventService:
+    """Event service dependency"""
+    return _build_event_service(db)
 
 
 async def get_subject_repo(
@@ -132,20 +138,7 @@ async def get_event_service_transactional(
     db: AsyncSession = Depends(get_db_transactional)
 ) -> EventService:
     """Event service dependency with transaction management"""
-    from services.workflow_engine import WorkflowEngine
-
-    event_repo = EventRepository(db)
-    event_service = EventService(
-        event_repo=event_repo,
-        hash_service=HashService(),
-        schema_repo=EventSchemaRepository(db)
-    )
-
-    # Add workflow engine
-    workflow_engine = WorkflowEngine(db, event_service)
-    event_service.workflow_engine = workflow_engine
-
-    return event_service
+    return _build_event_service(db)
 
 
 async def get_subject_repo_transactional(
@@ -228,7 +221,7 @@ async def get_document_service_transactional(
 def require_permission(resource: str, action: str):
     """
     Dependency factory for route-level permission checking.
-    
+
     Usage:
         @router.post("/events/", dependencies=[Depends(require_permission("event", "create"))])
         async def create_event(...):
@@ -236,25 +229,23 @@ def require_permission(resource: str, action: str):
     """
     async def permission_checker(
         user: TokenPayload = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db)
+        authz_service: AuthorizationService = Depends(get_authz_service)
     ) -> TokenPayload:
-        authz_service = AuthorizationService(db)
-        
         has_permission = await authz_service.check_permission(
             user_id=user.sub,
             tenant_id=user.tenant_id,
             resource=resource,
             action=action
         )
-        
+
         if not has_permission:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: {resource}:{action} required"
             )
-        
+
         return user
-    
+
     return permission_checker
 
 

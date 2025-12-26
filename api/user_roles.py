@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.exc import IntegrityError
 
@@ -8,6 +8,7 @@ from schemas.role import UserRoleAssign, RoleResponse
 from models.tenant import Tenant
 from repositories.permission_repo import PermissionRepository
 from repositories.role_repo import RoleRepository
+from repositories.user_repo import UserRepository
 from core.database import get_db_transactional, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,8 +26,17 @@ async def assign_role_to_user(
     _: Annotated[TokenPayload, Depends(require_permission("role", "assign"))]
 ):
     """Assign role to user (requires 'role:assign' permission)"""
+    user_repo = UserRepository(db)
     role_repo = RoleRepository(db)
     perm_repo = PermissionRepository(db)
+
+    # Verify user exists in tenant
+    user = await user_repo.get_by_id_and_tenant(user_id, current_tenant.id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
 
     # Verify role exists and belongs to tenant
     role = await role_repo.get_by_id(data.role_id)
@@ -75,11 +85,20 @@ async def remove_role_from_user(
     current_user: Annotated[TokenPayload, Depends(get_current_user)],
     current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
-    _: Annotated[TokenPayload, Depends(require_permission("role", "assign"))] 
+    _: Annotated[TokenPayload, Depends(require_permission("role", "assign"))]
 ):
     """Remove role from user (requires 'role:assign' permission)"""
+    user_repo = UserRepository(db)
     perm_repo = PermissionRepository(db)
     role_repo = RoleRepository(db)
+
+    # Verify user exists in tenant
+    user = await user_repo.get_by_id_and_tenant(user_id, current_tenant.id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
 
     # Verify role exists and belongs to tenant
     role = await role_repo.get_by_id(role_id)
@@ -97,7 +116,7 @@ async def remove_role_from_user(
         )
 
 
-@router.get("/users/me/roles", response_model=List[RoleResponse])
+@router.get("/users/me/roles", response_model=list[RoleResponse])
 async def get_my_roles(
     current_user: Annotated[TokenPayload, Depends(get_current_user)],
     current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
@@ -110,7 +129,7 @@ async def get_my_roles(
     return [RoleResponse.model_validate(role) for role in roles]
 
 
-@router.get("/users/{user_id}/roles", response_model=List[RoleResponse])
+@router.get("/users/{user_id}/roles", response_model=list[RoleResponse])
 async def get_user_roles(
     user_id: str,
     current_user: Annotated[TokenPayload, Depends(get_current_user)],
@@ -119,7 +138,16 @@ async def get_user_roles(
     _: Annotated[TokenPayload, Depends(require_permission("role", "read"))]
 ):
     """Get all roles assigned to a user (requires 'role:read' permission)"""
+    user_repo = UserRepository(db)
     perm_repo = PermissionRepository(db)
+
+    # Verify user exists in tenant (prevents user enumeration)
+    user = await user_repo.get_by_id_and_tenant(user_id, current_tenant.id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
 
     roles = await perm_repo.get_user_roles(user_id, current_tenant.id)
     return [RoleResponse.model_validate(role) for role in roles]

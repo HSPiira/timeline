@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 
@@ -57,6 +57,7 @@ async def create_role(
 
         # Assign permissions if provided
         if data.permission_codes:
+            invalid_codes = []
             for perm_code in data.permission_codes:
                 permission = await perm_repo.get_by_code_and_tenant(perm_code, current_tenant.id)
                 if permission:
@@ -65,17 +66,26 @@ async def create_role(
                         permission_id=permission.id,
                         tenant_id=current_tenant.id
                     )
+                else:
+                    invalid_codes.append(perm_code)
+
+            # Fail if any permission codes were invalid
+            if invalid_codes:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid permission codes: {', '.join(invalid_codes)}"
+                )
 
         return RoleResponse.model_validate(created_role)
 
-    except IntegrityError as e:
+    except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Role creation failed due to constraint violation"
         ) from None
 
 
-@router.get("/", response_model=List[RoleResponse])
+@router.get("/", response_model=list[RoleResponse])
 async def list_roles(
     current_user: Annotated[TokenPayload, Depends(get_current_user)],
     current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
@@ -254,6 +264,14 @@ async def remove_permission_from_role(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Role not found"
+        )
+
+    # Validate permission exists and belongs to tenant
+    permission = await perm_repo.get_by_id(permission_id)
+    if not permission or permission.tenant_id != current_tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Permission not found"
         )
 
     success = await perm_repo.remove_permission_from_role(role_id, permission_id)

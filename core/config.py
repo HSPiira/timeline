@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from functools import lru_cache
 from typing import Optional                                                                                                                                                       
                                                                                                                                                                                         
@@ -32,8 +33,26 @@ class Settings(BaseSettings):
     allowed_mime_types: str = "*/*"  # Or comma-separated list
 
     # Tenant
-    tenant_header_name: str = "X-Tenant-ID"                                                                                                                                         
-                                                                                                                                                                                    
+    tenant_header_name: str = "X-Tenant-ID"
+
+    @model_validator(mode='after')
+    def validate_storage_config(self) -> 'Settings':
+        """Validate storage backend configuration"""
+        if self.storage_backend == 's3':
+            if not self.s3_bucket:
+                raise ValueError(
+                    "s3_bucket is required when storage_backend is 's3'. "
+                    "Set S3_BUCKET environment variable or update .env file."
+                )
+            # Note: s3_access_key and s3_secret_key are optional
+            # If not provided, AWS SDK will attempt to use IAM role/instance profile
+        elif self.storage_backend not in ('local', 's3'):
+            raise ValueError(
+                f"Invalid storage_backend '{self.storage_backend}'. "
+                f"Must be one of: 'local', 's3'"
+            )
+        return self
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -1,4 +1,4 @@
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from models.tenant import Tenant
@@ -18,11 +18,14 @@ from repositories.subject_repo import SubjectRepository
 from repositories.event_repo import EventRepository
 from services.document_service import DocumentService
 from core.config import get_settings
+from core.logging import get_logger
 from core.exceptions import (
     StorageNotFoundError,
     StorageChecksumMismatchError,
     StorageUploadError
 )
+
+logger = get_logger(__name__)
 
 
 router = APIRouter()
@@ -115,22 +118,24 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
-        )
+        ) from e
     except StorageChecksumMismatchError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"File integrity check failed: {str(e)}"
-        )
+            detail=f"File integrity check failed: {e!s}"
+        ) from e
     except StorageUploadError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Storage upload failed: {str(e)}"
-        )
-    except Exception as e:
+            detail=f"Storage upload failed: {e!s}"
+        ) from e
+    except (OSError, RuntimeError) as e:
+        # Catch specific exceptions that may occur during upload
+        logger.error(f"Unexpected error during document upload: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected error during upload: {str(e)}"
-        )
+            detail="Unexpected error during upload"
+        ) from e
 
 
 @router.get(
@@ -172,7 +177,7 @@ async def download_document(
 
     try:
         # Stream file from storage
-        file_stream = doc_service.download_document(document.storage_ref)
+        file_stream = await doc_service.download_document_stream(document)
 
         return StreamingResponse(
             file_stream,
@@ -187,12 +192,17 @@ async def download_document(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document file not found in storage"
+        ) from None
+    except (OSError, RuntimeError) as e:
+        logger.error(
+            f"Error downloading document {document_id}: {e}",
+            exc_info=True,
+            extra={"document_id": document_id, "tenant_id": tenant.id}
         )
-    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error downloading document: {str(e)}"
-        )
+            detail="Error downloading document"
+        ) from e
 
 
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -254,7 +264,7 @@ async def create_document(
     return created
 
 
-@router.get("/subject/{subject_id}", response_model=List[DocumentResponse])
+@router.get("/subject/{subject_id}", response_model=list[DocumentResponse])
 async def get_documents_by_subject(
     subject_id: str,
     repo: Annotated[DocumentRepository, Depends(get_document_repo)],
@@ -265,7 +275,7 @@ async def get_documents_by_subject(
     return await repo.get_by_subject(subject_id, tenant.id, include_deleted)
 
 
-@router.get("/event/{event_id}", response_model=List[DocumentResponse])
+@router.get("/event/{event_id}", response_model=list[DocumentResponse])
 async def get_documents_by_event(
     event_id: str,
     repo: Annotated[DocumentRepository, Depends(get_document_repo)],
@@ -275,7 +285,7 @@ async def get_documents_by_event(
     return await repo.get_by_event(event_id, tenant.id)
 
 
-@router.get("/{document_id}/versions", response_model=List[DocumentResponse])
+@router.get("/{document_id}/versions", response_model=list[DocumentResponse])
 async def get_document_versions(
     document_id: str,
     repo: Annotated[DocumentRepository, Depends(get_document_repo)],

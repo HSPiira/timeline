@@ -7,11 +7,13 @@ from api.deps import (
     get_event_schema_repo,
     get_event_schema_repo_transactional,
     get_current_tenant,
+    get_current_user,
     get_event_repo
 )
 from models.tenant import Tenant
 from models.event_schema import EventSchema
 from schemas.event_schema import EventSchemaCreate, EventSchemaUpdate, EventSchemaResponse
+from schemas.token import TokenPayload
 from repositories.event_schema_repo import EventSchemaRepository
 from repositories.event_repo import EventRepository
 
@@ -23,13 +25,20 @@ router = APIRouter()
 async def create_event_schema(
     data: EventSchemaCreate,
     repo: Annotated[EventSchemaRepository, Depends(get_event_schema_repo_transactional)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
+    current_user: Annotated[TokenPayload, Depends(get_current_user)]
 ) -> EventSchemaResponse:
     """
     Create a new event schema version for the tenant.
 
     The version number is auto-incremented based on existing versions for this event_type.
     New schemas are automatically activated, and the previous active schema is deactivated.
+
+    Note on schema activation:
+    - Deactivating previous schemas ensures new events use the latest schema for data quality
+    - Clients that cached the old active schema will get a validation error and must retry
+    - This is transactional, so race conditions are minimized
+    - Events can only be created with active schemas to maintain data integrity
     """
     try:
         # Auto-increment version number
@@ -48,14 +57,14 @@ async def create_event_schema(
             schema_definition=data.schema_definition,
             version=next_version,
             is_active=True,  # Auto-activate new schema
-            created_by=None  # TODO: Get from current user when authentication is implemented
+            created_by=current_user.sub  # User ID from JWT token
         )
         created_schema = await repo.create(schema)
         return EventSchemaResponse.model_validate(created_schema)
     except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Schema for event type '{data.event_type}' version {next_version} already exists"
+            detail=f"Schema for event type '{data.event_type}' already exists (concurrent creation conflict)"
         ) from None
 
 
