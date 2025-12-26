@@ -95,8 +95,10 @@ class VerificationService:
         Returns:
             ChainVerificationResult with detailed verification status
         """
-        # Get all events for subject in chronological order
+        # Get all events for subject and sort in chronological order (oldest first)
         events = await self.event_repo.get_by_subject(subject_id, tenant_id)
+        # Repository returns DESC order, but verification needs ASC (oldest first)
+        events = sorted(events, key=lambda e: e.event_time)
 
         if not events:
             return ChainVerificationResult(
@@ -170,6 +172,13 @@ class VerificationService:
             if event.subject_id not in events_by_subject:
                 events_by_subject[event.subject_id] = []
             events_by_subject[event.subject_id].append(event)
+
+        # Sort each subject's events chronologically (oldest first) for verification
+        for subject_id in events_by_subject:
+            events_by_subject[subject_id] = sorted(
+                events_by_subject[subject_id],
+                key=lambda e: e.event_time
+            )
 
         all_results = []
         valid_count = 0

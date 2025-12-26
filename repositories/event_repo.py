@@ -20,6 +20,17 @@ class EventRepository(BaseRepository[Event]):
         )
         return result.scalar_one_or_none()
 
+    async def get_last_event(self, subject_id: str, tenant_id: str) -> Event | None:
+        """Get the most recent event for a subject within a tenant"""
+        result = await self.db.execute(
+            select(Event)
+            .where(Event.subject_id == subject_id)
+            .where(Event.tenant_id == tenant_id)
+            .order_by(desc(Event.event_time))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def create_event(
         self,
         tenant_id: str,

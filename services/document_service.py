@@ -28,7 +28,7 @@ class DocumentService:
         storage_service: IStorageService,
         document_repo: DocumentRepository,
         tenant_repo: TenantRepository
-    ):
+    ) -> None:
         self.storage = storage_service
         self.document_repo = document_repo
         self.tenant_repo = tenant_repo

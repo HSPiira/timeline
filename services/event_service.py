@@ -1,11 +1,13 @@
 import jsonschema
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import select
-from core.protocols import IEventRepository, IHashService
+from core.protocols import (
+    IEventRepository,
+    IHashService,
+    ISubjectRepository,
+    IEventSchemaRepository
+)
 from core.logging import get_logger
 from schemas.event import EventCreate
-from repositories.event_schema_repo import EventSchemaRepository
-from models.subject import Subject
 from models.event import Event
 
 if TYPE_CHECKING:
@@ -22,11 +24,13 @@ class EventService:
         self,
         event_repo: IEventRepository,
         hash_service: IHashService,
-        schema_repo: Optional[EventSchemaRepository] = None,
+        subject_repo: ISubjectRepository,
+        schema_repo: Optional[IEventSchemaRepository] = None,
         workflow_engine: Optional["WorkflowEngine"] = None
-    ):
+    ) -> None:
         self.event_repo = event_repo
         self.hash_service = hash_service
+        self.subject_repo = subject_repo
         self.schema_repo = schema_repo
         self.workflow_engine = workflow_engine
 
@@ -34,6 +38,7 @@ class EventService:
         self,
         tenant_id: str,
         event: EventCreate,
+        *,
         trigger_workflows: bool = True
     ) -> Event:
         """
@@ -51,13 +56,9 @@ class EventService:
             ValueError: If subject doesn't exist or schema validation fails
         """
         # 1. Validate that subject exists and belongs to tenant
-        result = await self.event_repo.db.execute(
-            select(Subject).where(
-                Subject.id == event.subject_id,
-                Subject.tenant_id == tenant_id
-            )
+        subject = await self.subject_repo.get_by_id_and_tenant(
+            event.subject_id, tenant_id
         )
-        subject = result.scalar_one_or_none()
 
         if not subject:
             raise ValueError(
@@ -73,10 +74,20 @@ class EventService:
                 event.payload
             )
 
-        # 3. Get the previous event hash for this subject (for chaining)
-        prev_hash = await self.event_repo.get_last_hash(event.subject_id, tenant_id)
+        # 3. Get the previous event for this subject (for chaining and validation)
+        prev_event = await self.event_repo.get_last_event(
+            event.subject_id, tenant_id
+        )
+        prev_hash = prev_event.hash if prev_event else None
 
-        # 4. Compute hash using previous event's hash
+        # 4. Validate temporal ordering (prevent tampering)
+        if prev_event and event.event_time <= prev_event.event_time:
+            raise ValueError(
+                f"Event time {event.event_time} must be after previous event time {prev_event.event_time}. "
+                f"This prevents tampering with the event chain."
+            )
+
+        # 5. Compute hash using previous event's hash
         event_hash = self.hash_service.compute_hash(
             tenant_id,
             event.subject_id,
@@ -86,12 +97,12 @@ class EventService:
             prev_hash,
         )
 
-        # 5. Create the event
+        # 6. Create the event
         created_event = await self.event_repo.create_event(
             tenant_id, event, event_hash, prev_hash
         )
 
-        # 6. Trigger workflows if enabled
+        # 7. Trigger workflows if enabled
         if trigger_workflows:
             await self._trigger_workflows(created_event, tenant_id)
 
@@ -119,14 +130,14 @@ class EventService:
             executions = await self.workflow_engine.process_event_triggers(event, tenant_id)
             if executions:
                 logger.info(
-                    f"Triggered {len(executions)} workflow(s) for event {event.id} "
-                    f"(type: {event.event_type})"
+                    "Triggered %d workflow(s) for event %s (type: %s)",
+                    len(executions), event.id, event.event_type
                 )
             return executions
-        except Exception as e:
-            logger.error(
-                f"Workflow trigger failed for event {event.id} (type: {event.event_type}): {e}",
-                exc_info=True
+        except Exception:
+            logger.exception(
+                "Workflow trigger failed for event %s (type: %s)",
+                event.id, event.event_type
             )
             return []
 

@@ -35,7 +35,7 @@ class AuthorizationService:
             .where(
                 UserRole.user_id == user_id,
                 UserRole.tenant_id == tenant_id,
-                Role.is_active == True,
+                Role.is_active.is_(True),
                 # Handle role expiration
                 or_(UserRole.expires_at.is_(None), UserRole.expires_at > func.now())
             )

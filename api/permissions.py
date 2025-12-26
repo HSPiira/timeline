@@ -64,7 +64,7 @@ async def list_permissions(
     perm_repo = PermissionRepository(db)
 
     if resource:
-        permissions = await perm_repo.get_by_resource(current_tenant.id, resource)
+        permissions = await perm_repo.get_by_resource(current_tenant.id, resource, skip=skip, limit=limit)
     else:
         permissions = await perm_repo.get_by_tenant(current_tenant.id, skip=skip, limit=limit)
 

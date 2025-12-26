@@ -6,10 +6,9 @@ from domain.value_objects import TenantCode
 
 
 class TenantCreate(BaseModel):
-    """Schema for creating a tenant"""
+    """Schema for creating a tenant - status is always ACTIVE by default"""
     code: str
     name: str
-    status: TenantStatus = TenantStatus.ACTIVE
 
     @field_validator('code')
     @classmethod

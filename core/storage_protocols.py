@@ -5,7 +5,8 @@ Provides abstract interface for object storage backends following
 Dependency Inversion Principle (DIP) - enables switching between
 local filesystem, S3, MinIO, Azure Blob, etc. without domain logic changes.
 """
-from typing import Protocol, BinaryIO, AsyncIterator, Optional, Dict, Any
+from typing import Protocol, BinaryIO, Optional, Any
+from collections.abc import AsyncIterator  
 from datetime import timedelta
 
 
@@ -28,8 +29,8 @@ class IStorageService(Protocol):
         storage_ref: str,
         expected_checksum: str,
         content_type: str,
-        metadata: Optional[Dict[str, str]] = None
-    ) -> Dict[str, Any]:
+        metadata: Optional[dict[str, str]] = None
+    ) -> dict[str, Any]:
         """
         Upload file to storage with checksum verification.
 
@@ -116,7 +117,7 @@ class IStorageService(Protocol):
         """
         ...
 
-    async def get_metadata(self, storage_ref: str) -> Dict[str, Any]:
+    async def get_metadata(self, storage_ref: str) -> dict[str, Any]:
         """
         Get file metadata without downloading content.
 

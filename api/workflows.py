@@ -5,10 +5,12 @@ from models.tenant import Tenant
 from models.workflow import Workflow
 from api.deps import (
     get_current_tenant,
+    get_current_user,
     require_permission,
     get_db_transactional,
     get_db
 )
+from schemas.token import TokenPayload
 from schemas.workflow import (
     WorkflowCreate,
     WorkflowUpdate,
@@ -31,7 +33,8 @@ router = APIRouter()
 async def create_workflow(
     data: WorkflowCreate,
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    db: Annotated[AsyncSession, Depends(get_db_transactional)]
+    db: Annotated[AsyncSession, Depends(get_db_transactional)],
+    current_user: Annotated[TokenPayload, Depends(get_current_user)]
 ):
     """
     Create new workflow.
@@ -51,7 +54,7 @@ async def create_workflow(
         execution_order=data.execution_order,
         max_executions_per_day=data.max_executions_per_day,
         is_active=data.is_active,
-        created_by=None  # TODO: Get from user context
+        created_by=current_user.sub
     )
 
     created = await repo.create(workflow)
@@ -126,20 +129,9 @@ async def update_workflow(
         )
 
     # Update fields
-    if data.name is not None:
-        workflow.name = data.name
-    if data.description is not None:
-        workflow.description = data.description
-    if data.trigger_conditions is not None:
-        workflow.trigger_conditions = data.trigger_conditions
-    if data.actions is not None:
-        workflow.actions = data.actions
-    if data.execution_order is not None:
-        workflow.execution_order = data.execution_order
-    if data.max_executions_per_day is not None:
-        workflow.max_executions_per_day = data.max_executions_per_day
-    if data.is_active is not None:
-        workflow.is_active = data.is_active
+    update_data = data.model_dump(exclude_unset=True)  
+    for field, value in update_data.items():  
+        setattr(workflow, field, value)
 
     updated = await repo.update(workflow)
     return WorkflowResponse.model_validate(updated)

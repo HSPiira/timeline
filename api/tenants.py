@@ -1,4 +1,6 @@
 from typing import Annotated
+import secrets
+import string
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,18 @@ from core.enums import TenantStatus
 
 
 router = APIRouter()
+
+
+def generate_secure_password(length: int = 16) -> str:
+    """
+    Generate a cryptographically secure random password.
+
+    Uses secrets module for cryptographic randomness.
+    Password contains uppercase, lowercase, digits, and special characters.
+    """
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*-_=+"
+    password = ''.join(secrets.choice(alphabet) for _ in range(length))
+    return password
 
 
 @router.post("/", response_model=TenantCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -30,7 +44,7 @@ async def create_tenant(
     tenant = Tenant(
         code=data.code,
         name=data.name,
-        status=data.status.value  # Store enum value, not enum object
+        status=TenantStatus.ACTIVE.value  # Always create tenants as ACTIVE
     )
 
     try:
@@ -44,8 +58,9 @@ async def create_tenant(
 
         # Create admin user for the new tenant in the same transaction
         admin_username = "admin"
-        admin_password = "admin@123"  # Default password that should be changed on first login
-        admin_email = f"admin@{data.code}.local"
+        admin_password = "admin@123"
+        # admin_password = generate_secure_password()  # Cryptographically secure random password
+        admin_email = f"admin@{data.code}.tl"
 
         admin_user = await user_repo.create_user(
             tenant_id=created.id,
@@ -65,11 +80,11 @@ async def create_tenant(
             admin_username=admin_username,
             admin_password=admin_password
         )
-    except IntegrityError as e:
-        # Database constraint violation (duplicate code or username)
+    except IntegrityError:
+        # Database constraint violation 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tenant with code '{data.code}' already exists or admin user creation failed"
+            detail=f"Tenant with code '{data.code}' already exists"
         )
 
 
