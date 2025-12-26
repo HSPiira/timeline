@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import get_settings
 from core.database import engine
 from core.logging import setup_logging
-from api import auth, events, subjects, tenants, documents, users, event_schemas, roles, permissions, user_roles, workflows, email_accounts
+from api import auth, events, subjects, tenants, documents, users, event_schemas, roles, permissions, user_roles, workflows, email_accounts, gmail_oauth
 
 settings = get_settings()
 
@@ -43,6 +43,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(auth.router, prefix="/auth", tags=["authentication"])
+app.include_router(gmail_oauth.router)  # Includes /auth/gmail prefix
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])

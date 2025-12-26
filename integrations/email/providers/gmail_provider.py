@@ -1,6 +1,6 @@
 """Gmail provider implementation using Gmail API"""
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any, Callable
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -11,18 +11,29 @@ logger = get_logger(__name__)
 
 
 class GmailProvider:
-    """Gmail provider using Gmail API"""
+    """Gmail provider using Gmail API with automatic token refresh"""
 
     def __init__(self):
         self._service = None
         self._config: Optional[EmailProviderConfig] = None
+        self._credentials: Optional[Credentials] = None
+        self._token_refresh_callback: Optional[Callable] = None
+
+    def set_token_refresh_callback(self, callback: Callable[[Dict], None]):
+        """
+        Set callback to be called when tokens are refreshed.
+
+        The callback receives the updated credentials dict.
+        This allows the sync service to save refreshed tokens back to the database.
+        """
+        self._token_refresh_callback = callback
 
     async def connect(self, config: EmailProviderConfig) -> None:
-        """Connect to Gmail API"""
+        """Connect to Gmail API with automatic token refresh"""
         self._config = config
 
         # Build credentials from OAuth tokens
-        creds = Credentials(
+        self._credentials = Credentials(
             token=config.credentials.get('access_token'),
             refresh_token=config.credentials.get('refresh_token'),
             token_uri='https://oauth2.googleapis.com/token',
@@ -31,8 +42,38 @@ class GmailProvider:
         )
 
         # Build Gmail service
-        self._service = build('gmail', 'v1', credentials=creds)
+        # The service will automatically refresh tokens when they expire
+        self._service = build('gmail', 'v1', credentials=self._credentials)
         logger.info(f"Connected to Gmail API: {config.email_address}")
+
+    async def _check_and_refresh_tokens(self):
+        """
+        Check if credentials were refreshed and notify callback.
+
+        Google's OAuth library automatically refreshes tokens when needed.
+        We just need to check if they changed and notify our callback.
+        """
+        if not self._credentials or not self._token_refresh_callback:
+            return
+
+        # Check if token was refreshed
+        current_token = self._credentials.token
+        original_token = self._config.credentials.get('access_token')
+
+        if current_token != original_token:
+            # Token was refreshed, notify callback
+            updated_credentials = {
+                'access_token': self._credentials.token,
+                'refresh_token': self._credentials.refresh_token,
+                'client_id': self._config.credentials.get('client_id'),
+                'client_secret': self._config.credentials.get('client_secret'),
+            }
+
+            logger.info(f"Tokens refreshed for {self._config.email_address}")
+            self._token_refresh_callback(updated_credentials)
+
+            # Update config
+            self._config.credentials.update(updated_credentials)
 
     async def disconnect(self) -> None:
         """Disconnect from Gmail API"""
@@ -54,12 +95,15 @@ class GmailProvider:
             timestamp = int(since.timestamp())
             query = f'after:{timestamp}'
 
-        # List messages
+        # List messages (this may trigger token refresh)
         results = self._service.users().messages().list(
             userId='me',
             q=query,
             maxResults=limit
         ).execute()
+
+        # Check if tokens were refreshed during the API call
+        await self._check_and_refresh_tokens()
 
         message_ids = [msg['id'] for msg in results.get('messages', [])]
 
@@ -88,8 +132,9 @@ class GmailProvider:
         # Extract headers
         headers = {h['name']: h['value'] for h in msg['payload']['headers']}
 
-        # Parse timestamp
-        timestamp = datetime.fromtimestamp(int(msg['internalDate']) / 1000)
+        # Parse timestamp (Gmail internalDate is milliseconds since epoch)
+        # Make timezone-aware using UTC
+        timestamp = datetime.fromtimestamp(int(msg['internalDate']) / 1000, tz=timezone.utc)
 
         # Extract labels
         label_ids = msg.get('labelIds', [])

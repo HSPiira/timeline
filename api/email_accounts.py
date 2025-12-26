@@ -1,6 +1,6 @@
 """Email account API endpoints"""
 from typing import Annotated
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
 from fastapi.params import Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -40,18 +40,17 @@ async def create_email_account(
         select(Subject).where(
             Subject.tenant_id == tenant.id,
             Subject.subject_type == 'email_account',
-            Subject.external_id == data.email_address
+            Subject.external_ref == data.email_address
         )
     )
     subject = result.scalar_one_or_none()
 
     if not subject:
         # Create new subject
-        from models.subject import Subject
         subject = Subject(
             tenant_id=tenant.id,
             subject_type='email_account',
-            external_id=data.email_address,
+            external_ref=data.email_address,
             metadata={'email': data.email_address, 'provider': data.provider_type}
         )
         db.add(subject)
@@ -71,8 +70,9 @@ async def create_email_account(
     )
 
     db.add(email_account)
-    await db.commit()
-    await db.refresh(email_account)
+    await db.flush()  # Persist to DB and populate auto-generated fields
+    await db.refresh(email_account)  # Refresh relationships
+    await db.commit()  # Commit transaction
 
     logger.info(
         f"Created email account: {email_account.email_address} "
@@ -227,6 +227,109 @@ async def sync_email_account(
     return EmailSyncResponse(**stats)
 
 
+@router.post("/{account_id}/sync-background", status_code=status.HTTP_202_ACCEPTED)
+async def sync_email_account_background(
+    account_id: str,
+    background_tasks: BackgroundTasks,
+    sync_request: EmailSyncRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+):
+    """
+    Trigger email sync in background.
+
+    The sync runs asynchronously while the user continues working.
+    Returns immediately with 202 Accepted status.
+    """
+    # Verify email account exists
+    result = await db.execute(
+        select(EmailAccount).where(
+            EmailAccount.id == account_id,
+            EmailAccount.tenant_id == tenant.id
+        )
+    )
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email account not found"
+        )
+
+    if not account.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email account is deactivated"
+        )
+
+    # Add sync task to background
+    background_tasks.add_task(
+        _run_email_sync_background,
+        account_id=account_id,
+        tenant_id=tenant.id,
+        incremental=sync_request.incremental
+    )
+
+    return {
+        "message": "Email sync started in background",
+        "email_account_id": account_id,
+        "email_address": account.email_address,
+        "status": "queued",
+        "incremental": sync_request.incremental
+    }
+
+
+async def _run_email_sync_background(account_id: str, tenant_id: str, incremental: bool = True):
+    """
+    Background task to run email sync.
+
+    This runs asynchronously after the HTTP response is sent.
+    """
+    # Create new DB session for background task
+    from core.database import AsyncSessionLocal
+    from repositories.event_repo import EventRepository
+    from repositories.event_schema_repo import EventSchemaRepository
+    from services.hash_service import HashService
+
+    async with AsyncSessionLocal() as db:
+        try:
+            logger.info(f"Starting background sync for account {account_id}")
+
+            # Get email account
+            result = await db.execute(
+                select(EmailAccount).where(
+                    EmailAccount.id == account_id,
+                    EmailAccount.tenant_id == tenant_id
+                )
+            )
+            account = result.scalar_one_or_none()
+
+            if not account:
+                logger.error(f"Email account {account_id} not found in background task")
+                return
+
+            # Create services
+            event_repo = EventRepository(db)
+            schema_repo = EventSchemaRepository(db)
+            hash_service = HashService()
+            event_service = EventService(event_repo, schema_repo, hash_service)
+
+            # Run sync
+            sync_service = UniversalEmailSync(db, event_service)
+            stats = await sync_service.sync_account(account, incremental=incremental)
+
+            logger.info(
+                f"Background sync completed for {account.email_address}: "
+                f"{stats['events_created']} events created from {stats['messages_fetched']} messages"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Background sync failed for account {account_id}: {e}",
+                exc_info=True
+            )
+
+
 @router.post("/{account_id}/webhook", response_model=dict)
 async def setup_webhook(
     account_id: str,
@@ -260,7 +363,9 @@ async def setup_webhook(
         )
 
         # Store webhook ID
-        account.webhook_id = webhook_config.get('id', webhook_config.get('subscriptionId'))
+        account.webhook_id = webhook_config.get('id') or webhook_config.get('subscriptionId')
+        if not account.webhook_id: 
+           logger.warning(f"Webhook setup response missing ID: {webhook_config}")
         await db.commit()
 
         return webhook_config
@@ -269,4 +374,4 @@ async def setup_webhook(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
-        )
+        ) from e

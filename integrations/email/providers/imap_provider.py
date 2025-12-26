@@ -1,6 +1,6 @@
 """IMAP email provider implementation (works with iCloud, Yahoo, custom servers)"""
 import email
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from email.utils import parsedate_to_datetime
 import aioimaplib
@@ -110,9 +110,9 @@ class IMAPProvider:
         to_addresses = [addr.strip() for addr in email_message.get('To', '').split(',')]
         subject = email_message.get('Subject', '')
 
-        # Parse date
+        # Parse date (parsedate_to_datetime returns timezone-aware datetime)
         date_str = email_message.get('Date')
-        timestamp = parsedate_to_datetime(date_str) if date_str else datetime.utcnow()
+        timestamp = parsedate_to_datetime(date_str) if date_str else datetime.now(timezone.utc)
 
         # Extract flags
         flags_str = msg_data[0].decode() if msg_data[0] else ''
