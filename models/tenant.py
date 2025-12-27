@@ -1,23 +1,29 @@
-from sqlalchemy import Column, String, DateTime, CheckConstraint
-from sqlalchemy.sql import func
+from sqlalchemy import CheckConstraint, Column, String
+
 from core.database import Base
 from core.enums import TenantStatus
-from utils.generators import generate_cuid
+from models.mixins import CuidMixin, TimestampMixin
 
 
-class Tenant(Base):
+class Tenant(CuidMixin, TimestampMixin, Base):
+    """
+    Root tenant entity for multi-tenant architecture.
+
+    Note: Tenant does not have a tenant_id since it is the root of the hierarchy.
+    Uses CuidMixin and TimestampMixin only (no TenantMixin).
+    """
+
     __tablename__ = "tenant"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
+    # Business fields
     code = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    status = Column(String, nullable=False, default=TenantStatus.ACTIVE.value, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    status = Column(
+        String, nullable=False, default=TenantStatus.ACTIVE.value, index=True
+    )
 
     __table_args__ = (
         CheckConstraint(
-            f"status IN {tuple(TenantStatus.values())}",
-            name='tenant_status_check'
+            f"status IN {tuple(TenantStatus.values())}", name="tenant_status_check"
         ),
     )

@@ -1,28 +1,41 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api import (
+    auth,
+    documents,
+    email_accounts,
+    event_schemas,
+    events,
+    gmail_oauth,
+    permissions,
+    roles,
+    subjects,
+    tenants,
+    user_roles,
+    users,
+    workflows,
+)
+from api.deps import get_cache_service, set_cache_service
 from core.config import get_settings
 from core.database import engine, get_db
 from core.logging import setup_logging
-from core.telemetry import TelemetryConfig, set_telemetry, get_telemetry
-from middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
+from core.rate_limit import limiter
+from core.telemetry import TelemetryConfig, get_telemetry, set_telemetry
 from middleware.correlation import CorrelationIDMiddleware
+from middleware.security import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
 from services.cache_service import CacheService
-from api import auth, events, subjects, tenants, documents, users, event_schemas, roles, permissions, user_roles, workflows, email_accounts, gmail_oauth
-from api.deps import set_cache_service, get_cache_service
-from sqlalchemy.ext.asyncio import AsyncSession
-import logging
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,7 +52,7 @@ async def lifespan(app: FastAPI):
             telemetry = TelemetryConfig(
                 service_name=settings.app_name,
                 service_version=settings.app_version,
-                enabled=True
+                enabled=True,
             )
 
             # Setup telemetry with configured exporter
@@ -47,7 +60,7 @@ async def lifespan(app: FastAPI):
                 exporter_type=settings.telemetry_exporter,
                 otlp_endpoint=settings.telemetry_otlp_endpoint,
                 jaeger_endpoint=settings.telemetry_jaeger_endpoint,
-                sample_rate=settings.telemetry_sample_rate
+                sample_rate=settings.telemetry_sample_rate,
             )
 
             # Instrument FastAPI
@@ -64,9 +77,13 @@ async def lifespan(app: FastAPI):
             telemetry.instrument_logging()
 
             set_telemetry(telemetry)
-            logger.info(f"Distributed tracing initialized: exporter={settings.telemetry_exporter}")
+            logger.info(
+                f"Distributed tracing initialized: exporter={settings.telemetry_exporter}"
+            )
         except Exception as e:
-            logger.warning(f"Telemetry initialization failed: {e}. Continuing without tracing.")
+            logger.warning(
+                f"Telemetry initialization failed: {e}. Continuing without tracing."
+            )
     else:
         logger.info("Distributed tracing disabled in configuration")
 
@@ -78,7 +95,9 @@ async def lifespan(app: FastAPI):
             set_cache_service(cache_service)
             logger.info("Redis cache initialized successfully")
         except Exception as e:
-            logger.warning(f"Redis cache initialization failed: {e}. Continuing without cache.")
+            logger.warning(
+                f"Redis cache initialization failed: {e}. Continuing without cache."
+            )
     else:
         logger.info("Redis cache disabled in configuration")
 
@@ -111,7 +130,7 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     debug=settings.debug,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Configure rate limiter
@@ -120,7 +139,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Security middleware (order matters - applied in reverse)
 # 1. Request size limit (first check)
-app.add_middleware(RequestSizeLimitMiddleware, max_request_size=10*1024*1024)  # 10MB
+app.add_middleware(
+    RequestSizeLimitMiddleware, max_request_size=10 * 1024 * 1024
+)  # 10MB
 
 # 2. Correlation ID for request tracing
 app.add_middleware(CorrelationIDMiddleware)
@@ -145,13 +166,17 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
 app.include_router(events.router, prefix="/events", tags=["events"])
-app.include_router(event_schemas.router, prefix="/event-schemas", tags=["event-schemas"])
+app.include_router(
+    event_schemas.router, prefix="/event-schemas", tags=["event-schemas"]
+)
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
 app.include_router(roles.router, prefix="/roles", tags=["roles"])
 app.include_router(permissions.router, prefix="/permissions", tags=["permissions"])
 app.include_router(user_roles.router, prefix="", tags=["user-roles"])
 app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
-app.include_router(email_accounts.router, prefix="/email-accounts", tags=["email-accounts"])
+app.include_router(
+    email_accounts.router, prefix="/email-accounts", tags=["email-accounts"]
+)
 
 
 @app.get("/")
@@ -159,7 +184,7 @@ async def root():
     return {
         "name": settings.app_name,
         "version": settings.app_version,
-        "status": "running"
+        "status": "running",
     }
 
 
@@ -183,7 +208,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     checks = {
         "api": True,  # If we got here, API is responding
         "database": False,
-        "cache": None  # None = not configured, True = healthy, False = unhealthy
+        "cache": None,  # None = not configured, True = healthy, False = unhealthy
     }
 
     try:
@@ -203,12 +228,10 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             return {"status": "healthy", "checks": checks}
         else:
             return JSONResponse(
-                status_code=503,
-                content={"status": "unhealthy", "checks": checks}
+                status_code=503, content={"status": "unhealthy", "checks": checks}
             )
     except Exception as e:
         checks["error"] = str(e)
         return JSONResponse(
-            status_code=503,
-            content={"status": "unhealthy", "checks": checks}
+            status_code=503, content={"status": "unhealthy", "checks": checks}
         )

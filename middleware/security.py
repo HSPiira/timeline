@@ -2,6 +2,7 @@
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+
 from core.config import get_settings
 
 settings = get_settings()
@@ -34,29 +35,43 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
 
         # Force HTTPS in production
-        if hasattr(settings, 'environment') and settings.environment == "production":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains; preload"
-            )
+        if hasattr(settings, "environment") and settings.environment == "production":
+            response.headers[
+                "Strict-Transport-Security"
+            ] = "max-age=31536000; includeSubDomains; preload"
 
         # Content Security Policy
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "font-src 'self'; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none'"
-        )
+        # Relax CSP for API documentation endpoints (/docs, /redoc, /openapi.json)
+        if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
+            # Permissive CSP for Swagger UI and ReDoc
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https:; "
+                "font-src 'self' data: https://cdn.jsdelivr.net; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'"
+            )
+        else:
+            # Strict CSP for API endpoints
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "font-src 'self'; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'"
+            )
 
         # Referrer policy
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
         # Permissions policy (disable sensitive features)
-        response.headers["Permissions-Policy"] = (
-            "geolocation=(), microphone=(), camera=()"
-        )
+        response.headers[
+            "Permissions-Policy"
+        ] = "geolocation=(), microphone=(), camera=()"
 
         return response
 
@@ -88,9 +103,9 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                                 "code": "REQUEST_TOO_LARGE",
                                 "message": f"Request body too large. Maximum size: {self.max_request_size} bytes",
                                 "max_size_bytes": self.max_request_size,
-                                "received_size_bytes": content_length_int
+                                "received_size_bytes": content_length_int,
                             }
-                        }
+                        },
                     )
             except ValueError:
                 # Invalid Content-Length header
@@ -99,9 +114,9 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     content={
                         "detail": {
                             "code": "INVALID_CONTENT_LENGTH",
-                            "message": "Invalid Content-Length header"
+                            "message": "Invalid Content-Length header",
                         }
-                    }
+                    },
                 )
 
         return await call_next(request)

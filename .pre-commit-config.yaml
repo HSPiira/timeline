@@ -8,7 +8,7 @@ repos:
     rev: 23.12.1
     hooks:
       - id: black
-        language_version: python3.11
+        language_version: python3.12
         args: [--line-length=88]
 
   # Python linting and auto-fixing
@@ -90,7 +90,7 @@ repos:
 
 # Configuration for specific hooks
 default_language_version:
-  python: python3.11
+  python: python3.12
 
 # Files to exclude
 exclude: |

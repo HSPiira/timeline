@@ -1,10 +1,13 @@
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.config import get_settings
+from core.enums import TenantStatus
 from models.tenant import Tenant
 from repositories.base import BaseRepository
-from core.enums import TenantStatus
-from typing import Optional, List
-from core.config import get_settings
+from services.cache_service import CacheService
 
 
 class TenantRepository(BaseRepository[Tenant]):
@@ -15,7 +18,9 @@ class TenantRepository(BaseRepository[Tenant]):
     Cache TTL: 15 minutes (configurable)
     """
 
-    def __init__(self, db: AsyncSession, cache_service: Optional['CacheService'] = None):
+    def __init__(
+        self, db: AsyncSession, cache_service: Optional["CacheService"] = None
+    ):
         super().__init__(db, Tenant)
         self.cache = cache_service
         self.settings = get_settings()
@@ -43,13 +48,16 @@ class TenantRepository(BaseRepository[Tenant]):
         # Cache for future requests
         if tenant and self.cache and self.cache.is_available():
             tenant_dict = {
-                'id': tenant.id,
-                'code': tenant.code,
-                'name': tenant.name,
-                'status': tenant.status,
-                'is_active': tenant.is_active,
-                'created_at': tenant.created_at.isoformat() if tenant.created_at else None,
-                'updated_at': tenant.updated_at.isoformat() if tenant.updated_at else None,
+                "id": tenant.id,
+                "code": tenant.code,
+                "name": tenant.name,
+                "status": tenant.status,
+                "created_at": tenant.created_at.isoformat()
+                if tenant.created_at
+                else None,
+                "updated_at": tenant.updated_at.isoformat()
+                if tenant.updated_at
+                else None,
             }
             await self.cache.set(cache_key, tenant_dict, ttl=self.cache_ttl)
 
@@ -72,29 +80,32 @@ class TenantRepository(BaseRepository[Tenant]):
                 return tenant
 
         # Cache miss - query database
-        result = await self.db.execute(
-            select(Tenant).where(Tenant.code == code)
-        )
+        result = await self.db.execute(select(Tenant).where(Tenant.code == code))
         tenant = result.scalar_one_or_none()
 
         # Cache for future requests
         if tenant and self.cache and self.cache.is_available():
             tenant_dict = {
-                'id': tenant.id,
-                'code': tenant.code,
-                'name': tenant.name,
-                'status': tenant.status,
-                'is_active': tenant.is_active,
-                'created_at': tenant.created_at.isoformat() if tenant.created_at else None,
-                'updated_at': tenant.updated_at.isoformat() if tenant.updated_at else None,
+                "id": tenant.id,
+                "code": tenant.code,
+                "name": tenant.name,
+                "status": tenant.status,
+                "created_at": tenant.created_at.isoformat()
+                if tenant.created_at
+                else None,
+                "updated_at": tenant.updated_at.isoformat()
+                if tenant.updated_at
+                else None,
             }
             # Cache by both ID and code for maximum cache hit rate
             await self.cache.set(cache_key, tenant_dict, ttl=self.cache_ttl)
-            await self.cache.set(f"tenant:id:{tenant.id}", tenant_dict, ttl=self.cache_ttl)
+            await self.cache.set(
+                f"tenant:id:{tenant.id}", tenant_dict, ttl=self.cache_ttl
+            )
 
         return tenant
 
-    async def get_active_tenants(self, skip: int = 0, limit: int = 100) -> List[Tenant]:
+    async def get_active_tenants(self, skip: int = 0, limit: int = 100) -> list[Tenant]:
         """Get all active tenants with pagination"""
         result = await self.db.execute(
             select(Tenant)
@@ -104,7 +115,9 @@ class TenantRepository(BaseRepository[Tenant]):
         )
         return list(result.scalars().all())
 
-    async def update_status(self, tenant_id: str, status: TenantStatus) -> Optional[Tenant]:
+    async def update_status(
+        self, tenant_id: str, status: TenantStatus
+    ) -> Optional[Tenant]:
         """Update tenant status and invalidate cache"""
         tenant = await self.get_by_id(tenant_id)
         if tenant:
