@@ -27,7 +27,7 @@ class Event(Base):
         # Indexes for query performance
         Index('ix_event_subject_time', 'subject_id', 'event_time'),
         Index('ix_event_tenant_subject', 'tenant_id', 'subject_id'),
-        Index('ix_event_type_version', 'event_type', 'schema_version'),
+        Index('ix_event_tenant_type_version', 'tenant_id', 'event_type', 'schema_version'),
 
         # Immutability enforcement: created_at must always be set (prevents updates)
         CheckConstraint('created_at IS NOT NULL', name='ck_event_created_at_immutable'),

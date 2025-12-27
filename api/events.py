@@ -4,9 +4,9 @@ from fastapi.params import Query
 from models.tenant import Tenant
 from api.deps import get_current_tenant, get_event_service_transactional, get_event_repo, require_permission
 from schemas.event import EventCreate, EventResponse
-from schemas.verification import ChainVerificationResponse, EventVerificationResult, ChainVerificationResult
+from schemas.verification import ChainVerificationResponse, EventVerificationResult
 from services.event_service import EventService
-from services.verification_service import VerificationService
+from services.verification_service import VerificationService, ChainVerificationResult
 from services.hash_service import HashService
 from repositories.event_repo import EventRepository
 

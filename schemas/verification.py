@@ -1,6 +1,6 @@
 """Pydantic schemas for chain verification responses"""
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 
 
@@ -29,7 +29,7 @@ class ChainVerificationResponse(BaseModel):
     invalid_events: int
     is_chain_valid: bool
     verified_at: datetime
-    event_results: List[EventVerificationResult] = Field(default_factory=list)
+    event_results: list[EventVerificationResult] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

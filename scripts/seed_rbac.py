@@ -9,7 +9,7 @@ from sqlalchemy import select
 from core.database import AsyncSessionLocal
 from models.tenant import Tenant
 from models.role import Role
-from models.persmission import Permission, RolePermission
+from models.permission import Permission, RolePermission
 from utils.generators import generate_cuid
 
 

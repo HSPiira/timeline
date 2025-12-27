@@ -1,8 +1,9 @@
 """Universal email sync service (provider-agnostic)"""
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from google.auth.exceptions import RefreshError
 
 from integrations.email.protocols import IEmailProvider, EmailProviderConfig, EmailMessage
 from integrations.email.factory import EmailProviderFactory
@@ -15,6 +16,11 @@ from schemas.event import EventCreate
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class AuthenticationError(Exception):
+    """Raised when email provider authentication fails"""
+    pass
 
 
 class UniversalEmailSync:
@@ -49,7 +55,6 @@ class UniversalEmailSync:
             f"(provider: {email_account.provider_type}, incremental: {incremental})"
         )
 
-        # 1. Build provider config
         credentials = self.encryptor.decrypt(email_account.credentials_encrypted)
         config = EmailProviderConfig(
             provider_type=email_account.provider_type,
@@ -58,52 +63,58 @@ class UniversalEmailSync:
             connection_params=email_account.connection_params or {}
         )
 
-        # 2. Create provider (Gmail, Outlook, IMAP, etc.)
         provider = EmailProviderFactory.create_provider(config)
 
-        # 3. Set up token refresh callback for Gmail
         if email_account.provider_type == 'gmail' and hasattr(provider, 'set_token_refresh_callback'):
             def save_refreshed_tokens(updated_credentials: dict):
-                """Save refreshed tokens back to database"""
+                """
+                Save refreshed tokens back to database immediately.
+
+                This callback is synchronous because it's called from Google's OAuth library.
+                We update the email_account object in-memory and rely on the transaction
+                commit at the end of sync_account() to persist the changes.
+                """
                 try:
                     email_account.credentials_encrypted = self.encryptor.encrypt(updated_credentials)
-                    logger.info(f"Saved refreshed tokens for {email_account.email_address}")
+                    email_account.token_last_refreshed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    email_account.token_refresh_count = (email_account.token_refresh_count or 0) + 1
+                    logger.info(
+                        f"Auto-refreshed OAuth tokens for {email_account.email_address} "
+                        f"(refresh #{email_account.token_refresh_count}). System working correctly!"
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to save refreshed tokens: {e}", exc_info=True)
+                    email_account.token_refresh_failures = (email_account.token_refresh_failures or 0) + 1
+                    logger.error(
+                        f"CRITICAL: Failed to save refreshed tokens for {email_account.email_address}: {e}. "
+                        f"User may need to re-authenticate if tokens expire.",
+                        exc_info=True
+                    )
 
             provider.set_token_refresh_callback(save_refreshed_tokens)
 
         try:
-            # 4. Connect to provider
             await provider.connect(config)
 
-            # 4. Fetch messages
             since = email_account.last_sync_at if incremental else None
             messages = await provider.fetch_messages(since=since, limit=100)
 
             logger.info(f"Fetched {len(messages)} messages from {email_account.provider_type}")
 
-            # 5. Transform to Timeline events (UNIVERSAL - same for all providers)
             events_created, last_processed_timestamp = await self._transform_and_create_events(
                 email_account, messages
             )
 
-            # 6. Update last sync timestamp ONLY if we successfully processed events
-            # Use the timestamp of the most recent email processed, not current time
-            # This ensures failed events can be retried on the next sync
             if events_created > 0 and last_processed_timestamp:
-                # Strip timezone before saving (database column is timezone-naive)
-                # All timestamps are UTC, so we just remove the timezone info
                 email_account.last_sync_at = last_processed_timestamp.replace(tzinfo=None)
-                await self.db.commit()
-                logger.info(f"Updated last_sync_at to {last_processed_timestamp}")
             elif events_created == 0 and len(messages) > 0:
-                # No events created but messages were fetched - don't update timestamp
-                # This allows retry on next sync
                 logger.warning(
                     f"Fetched {len(messages)} messages but created 0 events. "
                     f"Not updating last_sync_at to allow retry."
                 )
+
+            # Always commit to persist any token refreshes that occurred
+            await self.db.commit()
+            logger.info(f"Sync transaction committed (events: {events_created}, last_sync_at updated: {events_created > 0})")
 
             stats = {
                 'messages_fetched': len(messages),
@@ -115,8 +126,22 @@ class UniversalEmailSync:
             logger.info(f"Sync completed: {stats}")
             return stats
 
+        except RefreshError as e:
+            # Track authentication failure for monitoring
+            email_account.last_auth_error = str(e)
+            email_account.last_auth_error_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            email_account.token_refresh_failures = (email_account.token_refresh_failures or 0) + 1
+            await self.db.commit()  # Persist error tracking even on failure
+
+            logger.error(
+                f"OAuth token refresh failed for {email_account.email_address}: {e}",
+                exc_info=True
+            )
+            raise AuthenticationError(
+                f"Gmail OAuth token has expired or been revoked for {email_account.email_address}. "
+                f"Please re-authenticate the email account."
+            ) from e
         finally:
-            # 7. Disconnect
             await provider.disconnect()
 
     async def _transform_and_create_events(
@@ -135,22 +160,12 @@ class UniversalEmailSync:
         events_created = 0
         last_successfully_processed_timestamp = None
 
-        # Get the timestamp of the latest event to handle backfilling
-        # For old emails, we'll adjust timestamps to maintain temporal ordering
         latest_event_time = await self._get_latest_event_time(email_account.subject_id)
-
-        # Sort messages chronologically (oldest first) to maintain event chain ordering
-        # The event service validates that new events have timestamps after previous events
         sorted_messages = sorted(messages, key=lambda msg: msg.timestamp)
-
-        # Track last timestamp to handle duplicates
-        from datetime import timedelta
-        last_timestamp = latest_event_time  # Start from latest event time if exists
+        last_timestamp = latest_event_time
 
         for msg in sorted_messages:
             try:
-                # Check if event already exists for this message_id (deduplication)
-                # This makes sync idempotent - safe to retry without creating duplicates
                 existing_event = await self._check_event_exists(
                     email_account.subject_id,
                     msg.message_id
@@ -160,19 +175,13 @@ class UniversalEmailSync:
                     logger.debug(
                         f"Skipping message {msg.message_id} - event already exists (id: {existing_event.id})"
                     )
-                    # Still track this as successfully processed to update last_sync_at
                     last_successfully_processed_timestamp = msg.timestamp
                     continue
 
-                # Determine event time - handle backfilling of old emails
-                # For emails older than latest event, we adjust the timestamp to maintain temporal ordering
-                # The original timestamp is preserved in payload.received_at
                 event_time = msg.timestamp
                 timestamp_adjusted = False
 
                 if last_timestamp and event_time <= last_timestamp:
-                    # Email is older than or equal to latest event
-                    # Adjust to 1 microsecond after the last timestamp
                     original_time = event_time
                     event_time = last_timestamp + timedelta(microseconds=1)
                     timestamp_adjusted = True
@@ -183,12 +192,10 @@ class UniversalEmailSync:
 
                 last_timestamp = event_time
 
-                # Create email_received event
-                # TODO: Query active schema version from database instead of hardcoding
                 event = EventCreate(
                     subject_id=email_account.subject_id,
                     event_type='email_received',
-                    schema_version=1,  # Using v1 for email_received events
+                    schema_version=1,
                     event_time=event_time,
                     payload={
                         'message_id': msg.message_id,
@@ -196,8 +203,8 @@ class UniversalEmailSync:
                         'from': msg.from_address,
                         'to': msg.to_addresses,
                         'subject': msg.subject,
-                        'received_at': msg.timestamp.isoformat(),  # Original email timestamp
-                        'timestamp_adjusted': timestamp_adjusted,  # Flag to indicate adjustment
+                        'received_at': msg.timestamp.isoformat(),
+                        'timestamp_adjusted': timestamp_adjusted,
                         'labels': msg.labels,
                         'is_read': msg.is_read,
                         'is_starred': msg.is_starred,
@@ -213,8 +220,6 @@ class UniversalEmailSync:
                 )
 
                 events_created += 1
-                # Track the timestamp of the last successfully processed email
-                # Use the original message timestamp, not the adjusted one
                 last_successfully_processed_timestamp = msg.timestamp
 
             except Exception as e:
@@ -231,23 +236,9 @@ class UniversalEmailSync:
         subject_id: str,
         message_id: str
     ) -> Optional[Event]:
-        """
-        Check if an event already exists for this email message.
-
-        Uses message_id from payload for deduplication.
-        This makes sync idempotent - can safely retry without creating duplicates.
-
-        Args:
-            subject_id: Email account subject ID
-            message_id: Email message ID from provider
-
-        Returns:
-            Event if exists, None otherwise
-        """
+        """Check if an event already exists for this email message"""
         from sqlalchemy import cast, String
 
-        # Query for email_received events with matching message_id in payload
-        # Use cast to extract text value from JSONB
         result = await self.db.execute(
             select(Event).where(
                 and_(
@@ -264,18 +255,7 @@ class UniversalEmailSync:
         self,
         subject_id: str
     ) -> Optional[datetime]:
-        """
-        Get the timestamp of the most recent event for this subject.
-
-        This is used to enforce temporal ordering - we skip emails older than
-        the latest event to prevent validation errors.
-
-        Args:
-            subject_id: Email account subject ID
-
-        Returns:
-            Timestamp of latest event, or None if no events exist
-        """
+        """Get the timestamp of the most recent event for this subject"""
         from sqlalchemy import desc
 
         result = await self.db.execute(
@@ -297,17 +277,7 @@ class UniversalEmailSync:
         email_account: EmailAccount,
         callback_url: str
     ) -> dict:
-        """
-        Setup webhook for real-time sync (if provider supports it).
-
-        Args:
-            email_account: EmailAccount configuration
-            callback_url: URL to receive webhook notifications
-
-        Returns:
-            Webhook configuration details
-        """
-        # Build provider config
+        """Setup webhook for real-time sync (if provider supports it)"""
         credentials = self.encryptor.decrypt(email_account.credentials_encrypted)
         config = EmailProviderConfig(
             provider_type=email_account.provider_type,
@@ -316,7 +286,6 @@ class UniversalEmailSync:
             connection_params=email_account.connection_params or {}
         )
 
-        # Create provider
         provider = EmailProviderFactory.create_provider(config)
 
         if not provider.supports_webhooks:
@@ -343,7 +312,7 @@ class UniversalEmailSync:
             select(Subject).where(
                 Subject.tenant_id == tenant_id,
                 Subject.subject_type == 'email_account',
-                Subject.external_id == email_address
+                Subject.external_ref == email_address
             )
         )
         return result.scalar_one_or_none()

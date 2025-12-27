@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480  # 8 hours
+    encryption_salt: str = "timeline-encryption-salt-v1"  # Deployment-unique salt for credential encryption
 
     # CORS - comma-separated list of allowed origins
     allowed_origins: str = "http://localhost:3000,http://localhost:8080"

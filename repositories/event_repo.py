@@ -52,7 +52,7 @@ class EventRepository(BaseRepository[Event]):
         return await self.create(event)
 
     async def get_by_subject(self, subject_id: str, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Event]:
-        """Get all events for a subject within a tenant, ordered chronologically"""
+        """Get all events for a subject within a tenant, ordered newest-first"""
         result = await self.db.execute(
             select(Event)
             .where(Event.subject_id == subject_id)

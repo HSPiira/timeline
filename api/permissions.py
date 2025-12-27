@@ -6,7 +6,7 @@ from api.deps import get_current_user, get_current_tenant
 from schemas.token import TokenPayload
 from schemas.role import PermissionCreate, PermissionResponse
 from models.tenant import Tenant
-from models.persmission import Permission
+from models.permission import Permission
 from repositories.permission_repo import PermissionRepository
 from core.database import get_db_transactional, get_db
 from sqlalchemy.ext.asyncio import AsyncSession

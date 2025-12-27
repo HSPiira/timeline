@@ -1,6 +1,6 @@
 """Email account model for integration metadata (NOT a core Timeline model)"""
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, JSON, Boolean
+from sqlalchemy import Column, String, DateTime, ForeignKey, JSON, Boolean, Integer
 from sqlalchemy.sql import func
 from core.database import Base
 from utils.generators import generate_cuid
@@ -34,9 +34,16 @@ class EmailAccount(Base):
     webhook_id = Column(String, nullable=True)  # For providers with webhook support
     is_active = Column(Boolean, default=True, nullable=False)
 
-    # Timestamps
-    created_at = Column(DateTime, default=func.now(), nullable=False)
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+    # Token health monitoring (prevents re-authentication issues)
+    token_last_refreshed_at = Column(DateTime, nullable=True)
+    token_refresh_count = Column(Integer, default=0, nullable=False)
+    token_refresh_failures = Column(Integer, default=0, nullable=False)
+    last_auth_error = Column(String, nullable=True)
+    last_auth_error_at = Column(DateTime, nullable=True)
 
-    def __repr__(self):
+    # Timestamps
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    def __repr__(self) -> str:
         return f"<EmailAccount(id={self.id}, email={self.email_address}, provider={self.provider_type})>"

@@ -9,7 +9,7 @@ This service is called when a new tenant is created to set up:
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.role import Role
-from models.persmission import Permission, RolePermission, UserRole
+from models.permission import Permission, RolePermission, UserRole
 from utils.generators import generate_cuid
 
 

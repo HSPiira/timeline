@@ -18,7 +18,7 @@ from schemas.email_account import (
     WebhookSetupRequest
 )
 from integrations.email.encryption import CredentialEncryptor
-from integrations.email.sync import UniversalEmailSync
+from integrations.email.sync import UniversalEmailSync, AuthenticationError
 from services.event_service import EventService
 from core.logging import get_logger
 
@@ -72,7 +72,6 @@ async def create_email_account(
     db.add(email_account)
     await db.flush()  # Persist to DB and populate auto-generated fields
     await db.refresh(email_account)  # Refresh relationships
-    await db.commit()  # Commit transaction
 
     logger.info(
         f"Created email account: {email_account.email_address} "
@@ -157,7 +156,7 @@ async def update_email_account(
     if data.is_active is not None:
         account.is_active = data.is_active
 
-    await db.commit()
+    await db.flush()
     await db.refresh(account)
 
     return EmailAccountResponse.model_validate(account)
@@ -185,7 +184,6 @@ async def delete_email_account(
         )
 
     account.is_active = False
-    await db.commit()
 
 
 @router.post("/{account_id}/sync", response_model=EmailSyncResponse)
@@ -219,12 +217,18 @@ async def sync_email_account(
 
     # Perform sync
     sync_service = UniversalEmailSync(db, event_service)
-    stats = await sync_service.sync_account(
-        account,
-        incremental=sync_request.incremental
-    )
 
-    return EmailSyncResponse(**stats)
+    try:
+        stats = await sync_service.sync_account(
+            account,
+            incremental=sync_request.incremental
+        )
+        return EmailSyncResponse(**stats)
+    except AuthenticationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        ) from e
 
 
 @router.post("/{account_id}/sync-background", status_code=status.HTTP_202_ACCEPTED)
@@ -323,6 +327,12 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, incrementa
                 f"{stats['events_created']} events created from {stats['messages_fetched']} messages"
             )
 
+        except AuthenticationError as e:
+            logger.error(
+                f"Authentication failed for account {account_id}: {e}",
+                exc_info=True
+            )
+            # Could notify user via webhook or email that re-authentication is needed
         except Exception as e:
             logger.error(
                 f"Background sync failed for account {account_id}: {e}",
@@ -364,9 +374,9 @@ async def setup_webhook(
 
         # Store webhook ID
         account.webhook_id = webhook_config.get('id') or webhook_config.get('subscriptionId')
-        if not account.webhook_id: 
+        if not account.webhook_id:
            logger.warning(f"Webhook setup response missing ID: {webhook_config}")
-        await db.commit()
+
 
         return webhook_config
 

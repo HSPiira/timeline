@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
-from models.persmission import Permission, RolePermission, UserRole
+from models.permission import Permission, RolePermission, UserRole
 from repositories.base import BaseRepository
 
 

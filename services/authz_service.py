@@ -3,7 +3,7 @@ from typing import Set
 from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.persmission import Permission, RolePermission, UserRole
+from models.permission import Permission, RolePermission, UserRole
 from models.role import Role
 from core.exceptions import PermissionDeniedError
 

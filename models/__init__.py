@@ -5,7 +5,7 @@ from models.event import Event
 from models.document import Document
 from models.event_schema import EventSchema
 from models.role import Role
-from models.persmission import Permission, RolePermission, UserRole
+from models.permission import Permission, RolePermission, UserRole
 from models.workflow import Workflow, WorkflowExecution
 from models.email_account import EmailAccount
 

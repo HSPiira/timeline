@@ -1,5 +1,5 @@
 """Email provider factory for instantiating providers"""
-from typing import Dict, Type
+from typing import ClassVar 
 from integrations.email.protocols import IEmailProvider, EmailProviderConfig
 from integrations.email.providers.gmail_provider import GmailProvider
 from integrations.email.providers.imap_provider import IMAPProvider
@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 class EmailProviderFactory:
     """Factory for creating email provider instances"""
 
-    _providers: Dict[str, Type[IEmailProvider]] = {
+    _providers: ClassVar[dict[str, type[IEmailProvider]]] = {
         'gmail': GmailProvider,
         'outlook': OutlookProvider,
         'imap': IMAPProvider,
@@ -47,7 +47,7 @@ class EmailProviderFactory:
         return provider_class()
 
     @classmethod
-    def register_provider(cls, provider_type: str, provider_class: Type[IEmailProvider]) -> None:
+    def register_provider(cls, provider_type: str, provider_class: type[IEmailProvider]) -> None:
         """
         Register a custom email provider.
 

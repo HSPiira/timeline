@@ -1,7 +1,7 @@
 """Universal email provider protocols and data structures"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol, Optional, List, Dict, Any
+from typing import Protocol, Optional, Any
 
 
 @dataclass
@@ -10,14 +10,14 @@ class EmailMessage:
     message_id: str
     thread_id: Optional[str]
     from_address: str
-    to_addresses: List[str]
+    to_addresses: list[str]
     subject: str
     timestamp: datetime
-    labels: List[str]
+    labels: list[str]
     is_read: bool
     is_starred: bool
     has_attachments: bool
-    provider_metadata: Dict[str, Any]
+    provider_metadata: dict[str, Any]
 
 
 @dataclass
@@ -25,13 +25,8 @@ class EmailProviderConfig:
     """Provider configuration and credentials"""
     provider_type: str  # gmail, outlook, imap
     email_address: str
-    credentials: Dict[str, Any]  # provider-specific credentials
-    connection_params: Dict[str, Any] = None  # optional connection parameters
-
-    def __post_init__(self):
-        if self.connection_params is None:
-            self.connection_params = {}
-
+    credentials: dict[str, Any]  # provider-specific credentials
+    connection_params: dict[str, Any] = field(default_factory=dict)  # optional connection parameters
 
 class IEmailProvider(Protocol):
     """Universal email provider interface (Dependency Inversion Principle)"""
@@ -48,7 +43,7 @@ class IEmailProvider(Protocol):
         self,
         since: Optional[datetime] = None,
         limit: int = 100
-    ) -> List[EmailMessage]:
+    ) -> list[EmailMessage]:
         """
         Fetch messages from provider.
 
@@ -61,7 +56,7 @@ class IEmailProvider(Protocol):
         """
         ...
 
-    async def setup_webhook(self, callback_url: str) -> Dict[str, Any]:
+    async def setup_webhook(self, callback_url: str) -> dict[str, Any]:
         """
         Setup webhook/push notifications for real-time sync.
 
