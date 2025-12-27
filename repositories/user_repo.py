@@ -87,7 +87,7 @@ class UserRepository(BaseRepository[User]):
         if not user:
             return None
 
-        user.is_active = "false"
+        user.is_active = False
         return await self.update(user)
 
     async def activate(self, user_id: str) -> Optional[User]:
@@ -96,7 +96,7 @@ class UserRepository(BaseRepository[User]):
         if not user:
             return None
 
-        user.is_active = "true"
+        user.is_active = True
         return await self.update(user)
 
     async def get_users_by_tenant(

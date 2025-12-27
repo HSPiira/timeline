@@ -1,8 +1,10 @@
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from core.auth import create_access_token
 from core.config import get_settings
@@ -13,10 +15,13 @@ from schemas.token import Token, TokenRequest
 
 router = APIRouter()
 settings = get_settings()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/token", response_model=Token)
+@limiter.limit("5/minute")  # Limit login attempts to 5 per minute per IP
 async def login(
+    request_obj: Request,  # Required for slowapi
     request: TokenRequest,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):

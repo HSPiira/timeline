@@ -20,6 +20,7 @@ jsonschema>=4.20.0
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.1.0
 cryptography>=41.0.0
+slowapi>=0.1.9  # API rate limiting
 
 # Caching
 redis>=5.0.1
@@ -44,6 +45,16 @@ authlib>=1.6.5  # Unified OAuth management
 
 # Background Jobs (optional)
 celery>=5.3.4
+
+# Observability & Tracing
+opentelemetry-api>=1.21.0
+opentelemetry-sdk>=1.21.0
+opentelemetry-instrumentation-fastapi>=0.42b0
+opentelemetry-instrumentation-sqlalchemy>=0.42b0
+opentelemetry-instrumentation-redis>=0.42b0
+opentelemetry-exporter-otlp>=1.21.0  # For Jaeger, Tempo, etc.
+opentelemetry-exporter-jaeger>=1.21.0  # Direct Jaeger export
+opentelemetry-instrumentation-logging>=0.42b0  # Correlate logs with traces
 
 # Testing
 pytest>=7.4.3

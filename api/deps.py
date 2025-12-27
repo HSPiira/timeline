@@ -15,12 +15,14 @@ from services.authz_service import AuthorizationService
 from services.document_service import DocumentService
 from services.event_service import EventService
 from services.hash_service import HashService
+from services.cache_service import CacheService
 from schemas.token import TokenPayload
 
 security = HTTPBearer()
 
-# Global storage service instance (singleton)
+# Global service instances (singletons)
 _storage_service = None
+_cache_service: CacheService = None
 
 
 async def get_current_user(
@@ -50,13 +52,15 @@ async def get_current_user(
 
 async def get_current_tenant(
     user: TokenPayload = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cache: CacheService = Depends(get_cache_service)
 ) -> Tenant:
     """
     Get current tenant from authenticated user's token claims.
     Tenant ID is derived from JWT token, preventing header spoofing attacks.
+    Uses Redis cache for performance optimization.
     """
-    tenant = await TenantRepository(db).get_by_id(user.tenant_id)
+    tenant = await TenantRepository(db, cache_service=cache).get_by_id(user.tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -65,7 +69,7 @@ async def get_current_tenant(
     return tenant
 
 
-def _build_event_service(db: AsyncSession) -> EventService:
+def _build_event_service(db: AsyncSession, cache_service: CacheService = None) -> EventService:
     """Internal helper to construct EventService with all dependencies"""
     from services.workflow_engine import WorkflowEngine
 
@@ -74,7 +78,7 @@ def _build_event_service(db: AsyncSession) -> EventService:
         event_repo=event_repo,
         hash_service=HashService(),
         subject_repo=SubjectRepository(db),
-        schema_repo=EventSchemaRepository(db)
+        schema_repo=EventSchemaRepository(db, cache_service=cache_service)
     )
 
     # Add workflow engine
@@ -85,10 +89,11 @@ def _build_event_service(db: AsyncSession) -> EventService:
 
 
 async def get_event_service(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cache: CacheService = Depends(get_cache_service)
 ) -> EventService:
-    """Event service dependency"""
-    return _build_event_service(db)
+    """Event service dependency with caching"""
+    return _build_event_service(db, cache)
 
 
 async def get_subject_repo(
@@ -106,10 +111,11 @@ async def get_event_repo(
 
 
 async def get_tenant_repo(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cache: CacheService = Depends(get_cache_service)
 ) -> TenantRepository:
-    """Tenant repository dependency"""
-    return TenantRepository(db)
+    """Tenant repository dependency with caching"""
+    return TenantRepository(db, cache_service=cache)
 
 
 async def get_document_repo(
@@ -127,18 +133,20 @@ async def get_user_repo(
 
 
 async def get_event_schema_repo(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cache: CacheService = Depends(get_cache_service)
 ) -> EventSchemaRepository:
-    """Event schema repository dependency"""
-    return EventSchemaRepository(db)
+    """Event schema repository dependency with caching"""
+    return EventSchemaRepository(db, cache_service=cache)
 
 
 # Transactional dependencies for write operations
 async def get_event_service_transactional(
-    db: AsyncSession = Depends(get_db_transactional)
+    db: AsyncSession = Depends(get_db_transactional),
+    cache: CacheService = Depends(get_cache_service)
 ) -> EventService:
-    """Event service dependency with transaction management"""
-    return _build_event_service(db)
+    """Event service dependency with transaction management and caching"""
+    return _build_event_service(db, cache)
 
 
 async def get_subject_repo_transactional(
@@ -149,10 +157,11 @@ async def get_subject_repo_transactional(
 
 
 async def get_tenant_repo_transactional(
-    db: AsyncSession = Depends(get_db_transactional)
+    db: AsyncSession = Depends(get_db_transactional),
+    cache: CacheService = Depends(get_cache_service)
 ) -> TenantRepository:
-    """Tenant repository dependency with transaction management"""
-    return TenantRepository(db)
+    """Tenant repository dependency with transaction management and caching"""
+    return TenantRepository(db, cache_service=cache)
 
 
 async def get_document_repo_transactional(
@@ -170,10 +179,33 @@ async def get_user_repo_transactional(
 
 
 async def get_event_schema_repo_transactional(
-    db: AsyncSession = Depends(get_db_transactional)
+    db: AsyncSession = Depends(get_db_transactional),
+    cache: CacheService = Depends(get_cache_service)
 ) -> EventSchemaRepository:
-    """Event schema repository dependency with transaction management"""
-    return EventSchemaRepository(db)
+    """Event schema repository dependency with transaction management and caching"""
+    return EventSchemaRepository(db, cache_service=cache)
+
+
+# Cache service dependencies
+async def get_cache_service() -> CacheService:
+    """
+    Cache service dependency (singleton)
+
+    Returns global cache service instance.
+    Initialized on app startup in main.py
+    """
+    global _cache_service
+    if _cache_service is None:
+        # Initialize cache service if not already done
+        _cache_service = CacheService()
+        # Note: connect() should be called on app startup in main.py
+    return _cache_service
+
+
+def set_cache_service(cache_service: CacheService):
+    """Set global cache service (called on app startup)"""
+    global _cache_service
+    _cache_service = cache_service
 
 
 # Storage service dependencies
@@ -182,7 +214,7 @@ async def get_storage_service():
     global _storage_service
     if _storage_service is not None:
         return _storage_service
-    
+
     from core.config import get_settings
     from services.storage.factory import StorageFactory
 
@@ -193,29 +225,31 @@ async def get_storage_service():
 
 async def get_document_service(
     storage = Depends(get_storage_service),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cache: CacheService = Depends(get_cache_service)
 ) -> "DocumentService":
-    """Document service dependency"""
+    """Document service dependency with caching"""
     from services.document_service import DocumentService
 
     return DocumentService(
         storage_service=storage,
         document_repo=DocumentRepository(db),
-        tenant_repo=TenantRepository(db)
+        tenant_repo=TenantRepository(db, cache_service=cache)
     )
 
 
 async def get_document_service_transactional(
     storage = Depends(get_storage_service),
-    db: AsyncSession = Depends(get_db_transactional)
+    db: AsyncSession = Depends(get_db_transactional),
+    cache: CacheService = Depends(get_cache_service)
 ) -> "DocumentService":
-    """Document service dependency with transaction"""
+    """Document service dependency with transaction and caching"""
     from services.document_service import DocumentService
 
     return DocumentService(
         storage_service=storage,
         document_repo=DocumentRepository(db),
-        tenant_repo=TenantRepository(db)
+        tenant_repo=TenantRepository(db, cache_service=cache)
     )
 
 def require_permission(resource: str, action: str):
@@ -251,7 +285,8 @@ def require_permission(resource: str, action: str):
 
 # Alternative: Inject authorization service for complex checks
 async def get_authz_service(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cache: CacheService = Depends(get_cache_service)
 ) -> AuthorizationService:
-    """Get authorization service for manual permission checks"""
-    return AuthorizationService(db)
+    """Get authorization service for manual permission checks with caching"""
+    return AuthorizationService(db, cache_service=cache)

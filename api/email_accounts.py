@@ -1,9 +1,11 @@
 """Email account API endpoints"""
 from typing import Annotated
-from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, Request, status, HTTPException, BackgroundTasks
 from fastapi.params import Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from api.deps import get_db, get_db_transactional, get_current_tenant, get_event_service_transactional
 from models.tenant import Tenant
@@ -24,6 +26,7 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/", response_model=EmailAccountResponse, status_code=status.HTTP_201_CREATED)
@@ -187,7 +190,9 @@ async def delete_email_account(
 
 
 @router.post("/{account_id}/sync", response_model=EmailSyncResponse)
+@limiter.limit("10/hour")  # Limit email sync to 10 per hour per IP
 async def sync_email_account(
+    request: Request,  # Required for slowapi
     account_id: str,
     sync_request: EmailSyncRequest,
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
@@ -232,7 +237,9 @@ async def sync_email_account(
 
 
 @router.post("/{account_id}/sync-background", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("20/hour")  # Limit background sync to 20 per hour per IP
 async def sync_email_account_background(
+    request: Request,  # Required for slowapi
     account_id: str,
     background_tasks: BackgroundTasks,
     sync_request: EmailSyncRequest,
