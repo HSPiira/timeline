@@ -21,8 +21,8 @@ class SubjectRepository(BaseRepository[Subject]):
         )
         return list(result.scalars().all())
 
-    async def get_by_type(self, tenant_id: str, subject_type: str) -> List[Subject]:
-        """Get all subjects of a specific type for a tenant"""
+    async def get_by_type(self, tenant_id: str, subject_type: str, skip: int = 0, limit: int = 100) -> List[Subject]:
+        """Get all subjects of a specific type for a tenant with pagination"""
         result = await self.db.execute(
             select(Subject)
             .where(
@@ -30,6 +30,8 @@ class SubjectRepository(BaseRepository[Subject]):
                 Subject.subject_type == subject_type
             )
             .order_by(Subject.created_at.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
 

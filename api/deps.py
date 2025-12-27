@@ -9,11 +9,18 @@ from repositories.tenant_repo import TenantRepository
 from repositories.event_repo import EventRepository
 from repositories.subject_repo import SubjectRepository
 from repositories.document_repo import DocumentRepository
+from repositories.user_repo import UserRepository
+from repositories.event_schema_repo import EventSchemaRepository
+from services.authz_service import AuthorizationService
+from services.document_service import DocumentService
 from services.event_service import EventService
 from services.hash_service import HashService
 from schemas.token import TokenPayload
 
 security = HTTPBearer()
+
+# Global storage service instance (singleton)
+_storage_service = None
 
 
 async def get_current_user(
@@ -62,10 +69,20 @@ async def get_event_service(
     db: AsyncSession = Depends(get_db)
 ) -> EventService:
     """Event service dependency"""
-    return EventService(
-        event_repo=EventRepository(db),
-        hash_service=HashService()
+    from services.workflow_engine import WorkflowEngine
+
+    event_repo = EventRepository(db)
+    event_service = EventService(
+        event_repo=event_repo,
+        hash_service=HashService(),
+        schema_repo=EventSchemaRepository(db)
     )
+
+    # Add workflow engine
+    workflow_engine = WorkflowEngine(db, event_service)
+    event_service.workflow_engine = workflow_engine
+
+    return event_service
 
 
 async def get_subject_repo(
@@ -96,15 +113,39 @@ async def get_document_repo(
     return DocumentRepository(db)
 
 
+async def get_user_repo(
+    db: AsyncSession = Depends(get_db)
+) -> UserRepository:
+    """User repository dependency"""
+    return UserRepository(db)
+
+
+async def get_event_schema_repo(
+    db: AsyncSession = Depends(get_db)
+) -> EventSchemaRepository:
+    """Event schema repository dependency"""
+    return EventSchemaRepository(db)
+
+
 # Transactional dependencies for write operations
 async def get_event_service_transactional(
     db: AsyncSession = Depends(get_db_transactional)
 ) -> EventService:
     """Event service dependency with transaction management"""
-    return EventService(
-        event_repo=EventRepository(db),
-        hash_service=HashService()
+    from services.workflow_engine import WorkflowEngine
+
+    event_repo = EventRepository(db)
+    event_service = EventService(
+        event_repo=event_repo,
+        hash_service=HashService(),
+        schema_repo=EventSchemaRepository(db)
     )
+
+    # Add workflow engine
+    workflow_engine = WorkflowEngine(db, event_service)
+    event_service.workflow_engine = workflow_engine
+
+    return event_service
 
 
 async def get_subject_repo_transactional(
@@ -126,3 +167,100 @@ async def get_document_repo_transactional(
 ) -> DocumentRepository:
     """Document repository dependency with transaction management"""
     return DocumentRepository(db)
+
+
+async def get_user_repo_transactional(
+    db: AsyncSession = Depends(get_db_transactional)
+) -> UserRepository:
+    """User repository dependency with transaction management"""
+    return UserRepository(db)
+
+
+async def get_event_schema_repo_transactional(
+    db: AsyncSession = Depends(get_db_transactional)
+) -> EventSchemaRepository:
+    """Event schema repository dependency with transaction management"""
+    return EventSchemaRepository(db)
+
+
+# Storage service dependencies
+async def get_storage_service():
+    """Storage service dependency"""
+    global _storage_service
+    if _storage_service is not None:
+        return _storage_service
+    
+    from core.config import get_settings
+    from services.storage.factory import StorageFactory
+
+    settings = get_settings()
+    _storage_service = StorageFactory.create_storage_service(settings)
+    return _storage_service
+
+
+async def get_document_service(
+    storage = Depends(get_storage_service),
+    db: AsyncSession = Depends(get_db)
+) -> "DocumentService":
+    """Document service dependency"""
+    from services.document_service import DocumentService
+
+    return DocumentService(
+        storage_service=storage,
+        document_repo=DocumentRepository(db),
+        tenant_repo=TenantRepository(db)
+    )
+
+
+async def get_document_service_transactional(
+    storage = Depends(get_storage_service),
+    db: AsyncSession = Depends(get_db_transactional)
+) -> "DocumentService":
+    """Document service dependency with transaction"""
+    from services.document_service import DocumentService
+
+    return DocumentService(
+        storage_service=storage,
+        document_repo=DocumentRepository(db),
+        tenant_repo=TenantRepository(db)
+    )
+
+def require_permission(resource: str, action: str):
+    """
+    Dependency factory for route-level permission checking.
+    
+    Usage:
+        @router.post("/events/", dependencies=[Depends(require_permission("event", "create"))])
+        async def create_event(...):
+            ...
+    """
+    async def permission_checker(
+        user: TokenPayload = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+    ) -> TokenPayload:
+        authz_service = AuthorizationService(db)
+        
+        has_permission = await authz_service.check_permission(
+            user_id=user.sub,
+            tenant_id=user.tenant_id,
+            resource=resource,
+            action=action
+        )
+        
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {resource}:{action} required"
+            )
+        
+        return user
+    
+    return permission_checker
+
+
+# Alternative: Inject authorization service for complex checks
+async def get_authz_service(
+    db: AsyncSession = Depends(get_db)
+) -> AuthorizationService:
+    """Get authorization service for manual permission checks"""
+    return AuthorizationService(db)

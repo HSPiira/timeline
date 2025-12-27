@@ -1,20 +1,198 @@
-from typing import Annotated, List
-from fastapi import APIRouter, Depends, status, HTTPException
+from typing import Annotated, List, Optional
+from fastapi import APIRouter, Depends, status, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from models.tenant import Tenant
 from api.deps import (
     get_current_tenant,
     get_document_repo,
     get_document_repo_transactional,
     get_subject_repo,
-    get_event_repo
+    get_event_repo,
+    get_document_service_transactional,
+    require_permission
 )
 from schemas.document import DocumentCreate, DocumentUpdate, DocumentResponse
+from schemas.storage import DocumentUploadResponse
 from repositories.document_repo import DocumentRepository
 from repositories.subject_repo import SubjectRepository
 from repositories.event_repo import EventRepository
+from services.document_service import DocumentService
+from core.config import get_settings
+from core.exceptions import (
+    StorageNotFoundError,
+    StorageChecksumMismatchError,
+    StorageUploadError
+)
 
 
 router = APIRouter()
+
+
+@router.post(
+    "/upload",
+    response_model=DocumentUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("document", "create"))]
+)
+async def upload_document(
+    doc_service: Annotated[DocumentService, Depends(get_document_service_transactional)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
+    file: UploadFile = File(..., description="File to upload"),
+    subject_id: str = Form(..., description="Subject ID this document belongs to"),
+    document_type: str = Form(..., description="Document type (invoice, contract, etc.)"),
+    event_id: Optional[str] = Form(None, description="Optional event ID to link document to")
+):
+    """
+    Upload a document file with metadata.
+
+    Security:
+    - Requires 'document:create' permission
+    - Validates file size against max_upload_size config
+    - Validates MIME type against allowed_mime_types config
+    - Validates subject_id belongs to current tenant
+    - Computes SHA-256 checksum for integrity
+    - Prevents duplicate uploads (same checksum)
+
+    Storage:
+    - Files stored at: tenants/{tenant_code}/documents/{document_id}/v{version}/{filename}
+    - Atomic writes with path traversal protection
+    - Metadata stored in database, binary data in storage
+    """
+    settings = get_settings()
+
+    # Validate file size
+    file.file.seek(0, 2)  # Seek to end
+    file_size = file.file.tell()
+    file.file.seek(0)  # Reset to beginning
+
+    if file_size > settings.max_upload_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size {file_size} bytes exceeds maximum allowed size of {settings.max_upload_size} bytes"
+        )
+
+    # Validate MIME type (if not wildcard)
+    if settings.allowed_mime_types != "*/*":
+        allowed_types = [t.strip() for t in settings.allowed_mime_types.split(",")]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"MIME type '{file.content_type}' not allowed. Allowed types: {settings.allowed_mime_types}"
+            )
+
+    try:
+        # Upload document through service layer
+        document = await doc_service.upload_document(
+            tenant_id=tenant.id,
+            subject_id=subject_id,
+            event_id=event_id,
+            file_data=file.file,
+            filename=file.filename,
+            original_filename=file.filename,
+            mime_type=file.content_type,
+            document_type=document_type,
+            created_by=None  # TODO: Get from authenticated user when user context available
+        )
+
+        return DocumentUploadResponse(
+            id=document.id,
+            subject_id=document.subject_id,
+            event_id=document.event_id,
+            document_type=document.document_type,
+            filename=document.filename,
+            original_filename=document.original_filename,
+            storage_ref=document.storage_ref,
+            checksum=document.checksum,
+            file_size=document.file_size,
+            mime_type=document.mime_type,
+            version=document.version,
+            is_latest_version=document.is_latest_version,
+            created_at=document.created_at
+        )
+
+    except ValueError as e:
+        # Business logic errors (duplicate, invalid subject, etc.)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except StorageChecksumMismatchError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"File integrity check failed: {str(e)}"
+        )
+    except StorageUploadError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Storage upload failed: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error during upload: {str(e)}"
+        )
+
+
+@router.get(
+    "/{document_id}/download",
+    dependencies=[Depends(require_permission("document", "read"))]
+)
+async def download_document(
+    document_id: str,
+    doc_service: Annotated[DocumentService, Depends(get_document_service_transactional)],
+    repo: Annotated[DocumentRepository, Depends(get_document_repo)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+):
+    """
+    Download a document file.
+
+    Security:
+    - Requires 'document:read' permission
+    - Validates document belongs to current tenant
+    - Streams file content (memory efficient)
+
+    Returns:
+    - StreamingResponse with original filename and MIME type
+    - Content-Disposition header for browser download
+    """
+    # Get document metadata and validate tenant access
+    document = await repo.get_by_id(document_id)
+
+    if not document or document.tenant_id != tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    if document.deleted_at:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Document has been deleted"
+        )
+
+    try:
+        # Stream file from storage
+        file_stream = doc_service.download_document(document.storage_ref)
+
+        return StreamingResponse(
+            file_stream,
+            media_type=document.mime_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{document.original_filename}"',
+                "Content-Length": str(document.file_size)
+            }
+        )
+
+    except StorageNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found in storage"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error downloading document: {str(e)}"
+        )
 
 
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)

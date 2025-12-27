@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from models.event import Event
 from schemas.event import EventCreate
 from repositories.base import BaseRepository
@@ -27,11 +27,12 @@ class EventRepository(BaseRepository[Event]):
         event_hash: str,
         previous_hash: str | None
     ) -> Event:
-        """Create a new event with computed hash"""
+        """Create a new event with computed hash and schema version"""
         event = Event(
             tenant_id=tenant_id,
             subject_id=data.subject_id,
             event_type=data.event_type,
+            schema_version=data.schema_version,  # Immutable - tracks which schema was used
             event_time=data.event_time,
             payload=data.payload,
             hash=event_hash,
@@ -39,13 +40,15 @@ class EventRepository(BaseRepository[Event]):
         )
         return await self.create(event)
 
-    async def get_by_subject(self, subject_id: str, tenant_id: str) -> list[Event]:
+    async def get_by_subject(self, subject_id: str, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Event]:
         """Get all events for a subject within a tenant, ordered chronologically"""
         result = await self.db.execute(
             select(Event)
             .where(Event.subject_id == subject_id)
             .where(Event.tenant_id == tenant_id)
-            .order_by(Event.event_time)
+            .order_by(Event.event_time.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -60,7 +63,7 @@ class EventRepository(BaseRepository[Event]):
         )
         return list(result.scalars().all())
 
-    async def get_by_type(self, tenant_id: str, event_type: str) -> list[Event]:
+    async def get_by_type(self, tenant_id: str, event_type: str, skip: int = 0, limit: int = 100) -> list[Event]:
         """Get all events of a specific type for a tenant"""
         result = await self.db.execute(
             select(Event)
@@ -69,6 +72,8 @@ class EventRepository(BaseRepository[Event]):
                 Event.event_type == event_type
             )
             .order_by(Event.event_time.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -82,3 +87,17 @@ class EventRepository(BaseRepository[Event]):
             )
         )
         return result.scalar_one_or_none()
+
+    async def count_by_schema_version(
+        self, tenant_id: str, event_type: str, schema_version: int
+    ) -> int:
+        """Count events using a specific schema version"""
+        result = await self.db.execute(
+            select(func.count(Event.id))
+            .where(
+                Event.tenant_id == tenant_id,
+                Event.event_type == event_type,
+                Event.schema_version == schema_version
+            )
+        )
+        return result.scalar() or 0

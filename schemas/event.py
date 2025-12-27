@@ -6,6 +6,7 @@ from typing import Any, Dict
 class EventCreate(BaseModel):
     subject_id: str
     event_type: str
+    schema_version: int  # Required - must match an active schema version
     event_time: datetime
     payload: Dict
 
@@ -19,6 +20,13 @@ class EventCreate(BaseModel):
                 "Event type must contain only alphanumeric characters and underscores"
             )
         return v.lower()  # Consistent with domain value objects convention
+
+    @field_validator('schema_version')
+    @classmethod
+    def validate_schema_version(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("Schema version must be >= 1")
+        return v
 
     @field_validator('event_time')
     @classmethod
@@ -39,6 +47,7 @@ class EventResponse(BaseModel):
     tenant_id: str
     subject_id: str
     event_type: str
+    schema_version: int  # Immutable - shows which schema version was used
     event_time: datetime
     payload: Dict[str, Any]
     hash: str
