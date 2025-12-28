@@ -1,22 +1,39 @@
-from sqlalchemy import Boolean, Column, Index, String, ForeignKey, DateTime, Text, UniqueConstraint
-from sqlalchemy.sql import func
-from core.database import Base
-from utils.generators import generate_cuid
+from datetime import datetime
 
-class Permission(Base):
-    """Granular permissions (e.g., 'event:create', 'subject:read')"""
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
+
+from core.database import Base
+from models.mixins import CuidMixin, TenantMixin
+
+
+class Permission(CuidMixin, TenantMixin, Base):
+    """
+    Granular permissions (e.g., 'event:create', 'subject:read').
+
+    Inherits from:
+        - CuidMixin: CUID primary key
+        - TenantMixin: Tenant foreign key
+
+    Note: Permissions are rarely modified, so no timestamps needed.
+    """
+
     __tablename__ = "permission"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    #Permission structure: resource:action
-    code = Column(String, nullable=False)  # e.g., 'event:create', 'subject:read'
-    resource = Column(String, nullable=False, index=True)  # e.g., 'event', 'subject'
-    action = Column(String, nullable=False, index=True)  # e.g., 'create', 'read', 'update', 'delete'
-    description = Column(Text, nullable=True)  # Optional description
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Permission structure: resource:action
+    code: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # e.g., 'event:create', 'subject:read'
+    resource: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )  # e.g., 'event', 'subject'
+    action: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )  # e.g., 'create', 'read', 'update', 'delete'
+    description: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # Optional description
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "code", name="uq_permission_tenant_code"),
@@ -24,35 +41,58 @@ class Permission(Base):
     )
 
 
-class RolePermission(Base):
-    """Many-to-many: roles ←→ permissions"""
+class RolePermission(CuidMixin, TenantMixin, Base):
+    """
+    Many-to-many: roles ←→ permissions.
+
+    Inherits from:
+        - CuidMixin: CUID primary key
+        - TenantMixin: Tenant foreign key
+    """
+
     __tablename__ = "role_permission"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
-    role_id = Column(String, ForeignKey("role.id", ondelete="CASCADE"), nullable=False)
-    permission_id = Column(String, ForeignKey("permission.id", ondelete="CASCADE"), nullable=False)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    role_id: Mapped[str] = mapped_column(
+        String, ForeignKey("role.id", ondelete="CASCADE"), nullable=False
+    )
+    permission_id: Mapped[str] = mapped_column(
+        String, ForeignKey("permission.id", ondelete="CASCADE"), nullable=False
+    )
 
     __table_args__ = (
         UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),
         Index("ix_role_permission_lookup", "tenant_id", "role_id"),
     )
 
-class UserRole(Base):
-    """Many-to-many: users ←→ roles"""
+
+class UserRole(CuidMixin, TenantMixin, Base):
+    """
+    Many-to-many: users ←→ roles.
+
+    Inherits from:
+        - CuidMixin: CUID primary key
+        - TenantMixin: Tenant foreign key
+    """
+
     __tablename__ = "user_role"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    role_id = Column(String, ForeignKey("role.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    role_id: Mapped[str] = mapped_column(
+        String, ForeignKey("role.id", ondelete="CASCADE"), nullable=False
+    )
 
-    #Optional: role assignment metadata
-    assigned_by = Column(String, ForeignKey("user.id"), nullable=True)  # Who assigned the role
-    assigned_at = Column(DateTime(timezone=True), server_default=func.now())  # When the role was assigned
-    expires_at = Column(DateTime(timezone=True), nullable=True)  # Optional expiration time
+    # Role assignment metadata
+    assigned_by: Mapped[str | None] = mapped_column(
+        String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "role_id", name="uq_user_role"),

@@ -1,49 +1,65 @@
 """Email account model for integration metadata (NOT a core Timeline model)"""
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, JSON, Boolean, Integer
-from sqlalchemy.sql import func
+from typing import Any
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
+
 from core.database import Base
-from utils.generators import generate_cuid
+from models.mixins import MultiTenantModel
 
 
-class EmailAccount(Base):
+class EmailAccount(MultiTenantModel, Base):
     """
     Email account configuration and credentials.
+
+    Inherits from MultiTenantModel:
+        - id: CUID primary key
+        - tenant_id: Foreign key to tenant
+        - created_at: Creation timestamp
+        - updated_at: Last update timestamp
 
     This is integration metadata, NOT a core Timeline model.
     The actual email activity is stored as Timeline Events.
     """
+
     __tablename__ = "email_account"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id"), nullable=False, index=True)
-    subject_id = Column(String, ForeignKey("subject.id"), nullable=False, index=True)
+    subject_id: Mapped[str] = mapped_column(
+        String, ForeignKey("subject.id"), nullable=False, index=True
+    )
 
     # Provider configuration
-    provider_type = Column(String, nullable=False)  # gmail, outlook, imap, icloud, yahoo
-    email_address = Column(String, nullable=False, index=True)
+    provider_type: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # gmail, outlook, imap, icloud, yahoo
+    email_address: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
     # Encrypted credentials (Fernet)
-    credentials_encrypted = Column(String, nullable=False)
+    credentials_encrypted: Mapped[str] = mapped_column(String, nullable=False)
 
     # Provider-specific connection parameters (IMAP server, ports, etc.)
-    connection_params = Column(JSON, nullable=True)
+    connection_params: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
 
     # Sync metadata
-    last_sync_at = Column(DateTime, nullable=True)
-    webhook_id = Column(String, nullable=True)  # For providers with webhook support
-    is_active = Column(Boolean, default=True, nullable=False)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    webhook_id: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # For providers with webhook support
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Token health monitoring (prevents re-authentication issues)
-    token_last_refreshed_at = Column(DateTime, nullable=True)
-    token_refresh_count = Column(Integer, default=0, nullable=False)
-    token_refresh_failures = Column(Integer, default=0, nullable=False)
-    last_auth_error = Column(String, nullable=True)
-    last_auth_error_at = Column(DateTime, nullable=True)
-
-    # Timestamps
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    token_last_refreshed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    token_refresh_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    token_refresh_failures: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    last_auth_error: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_auth_error_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
         return f"<EmailAccount(id={self.id}, email={self.email_address}, provider={self.provider_type})>"

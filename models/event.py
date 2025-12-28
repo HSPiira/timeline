@@ -1,36 +1,65 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, JSON, Index, CheckConstraint, event
-from sqlalchemy.sql import func
-from sqlalchemy.orm import Session
-from core.database import Base
-from utils.generators import generate_cuid
 import hashlib
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Any
+
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    event,
+)
+from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.sql import func
+
+from core.database import Base
+from models.mixins import CuidMixin, TenantMixin
 
 
-class Event(Base):
+class Event(CuidMixin, TenantMixin, Base):
+    """
+    Immutable event entity for event sourcing.
+
+    Inherits from:
+        - CuidMixin: CUID primary key
+        - TenantMixin: Tenant foreign key
+
+    Note: Events are append-only and cannot be modified after creation.
+    Uses manual created_at (no updated_at since events are immutable).
+    """
+
     __tablename__ = "event"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id"), nullable=False, index=True)
-    subject_id = Column(String, ForeignKey("subject.id"), nullable=False, index=True)
-    event_type = Column(String, nullable=False, index=True)
-    schema_version = Column(Integer, nullable=False)  # Immutable - tracks which schema version was used
-    event_time = Column(DateTime(timezone=True), nullable=False)
-    payload = Column(JSON, nullable=False)
-    previous_hash = Column(String)
-    hash = Column(String, nullable=False, unique=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    subject_id: Mapped[str] = mapped_column(
+        String, ForeignKey("subject.id"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    schema_version: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )  # Immutable - tracks which schema version was used
+    event_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    previous_hash: Mapped[str | None] = mapped_column(String)
+    hash: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     __table_args__ = (
         # Indexes for query performance
-        Index('ix_event_subject_time', 'subject_id', 'event_time'),
-        Index('ix_event_tenant_subject', 'tenant_id', 'subject_id'),
-        Index('ix_event_tenant_type_version', 'tenant_id', 'event_type', 'schema_version'),
-
+        Index("ix_event_subject_time", "subject_id", "event_time"),
+        Index("ix_event_tenant_subject", "tenant_id", "subject_id"),
+        Index(
+            "ix_event_tenant_type_version", "tenant_id", "event_type", "schema_version"
+        ),
         # Immutability enforcement: created_at must always be set (prevents updates)
-        CheckConstraint('created_at IS NOT NULL', name='ck_event_created_at_immutable'),
+        CheckConstraint("created_at IS NOT NULL", name="ck_event_created_at_immutable"),
     )
 
     @staticmethod
@@ -40,7 +69,7 @@ class Event(Base):
         schema_version: int,
         event_time: datetime,
         payload: dict,
-        previous_hash: Optional[str]
+        previous_hash: str | None,
     ) -> str:
         """
         Compute cryptographic hash for event integrity.
@@ -59,11 +88,11 @@ class Event(Base):
             "schema_version": schema_version,
             "event_time": event_time.isoformat(),
             "payload": payload,
-            "previous_hash": previous_hash
+            "previous_hash": previous_hash,
         }
 
         # Canonicalize JSON for consistent hashing
-        canonical_json = json.dumps(hash_content, sort_keys=True, separators=(',', ':'))
+        canonical_json = json.dumps(hash_content, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical_json.encode()).hexdigest()
 
     @classmethod
@@ -76,7 +105,7 @@ class Event(Base):
         schema_version: int,
         event_time: datetime,
         payload: dict,
-        previous_hash: Optional[str] = None
+        previous_hash: str | None = None,
     ) -> "Event":
         """
         Factory method that validates hash chain and prevents tampering at insert time.
@@ -91,10 +120,11 @@ class Event(Base):
         """
         # Validate previous hash if provided
         if previous_hash:
-            prev_event = session.query(Event).filter(
-                Event.subject_id == subject_id,
-                Event.hash == previous_hash
-            ).first()
+            prev_event = (
+                session.query(Event)
+                .filter(Event.subject_id == subject_id, Event.hash == previous_hash)
+                .first()
+            )
 
             if not prev_event:
                 raise ValueError(
@@ -114,7 +144,7 @@ class Event(Base):
             schema_version=schema_version,
             event_time=event_time,
             payload=payload,
-            previous_hash=previous_hash
+            previous_hash=previous_hash,
         )
 
         # Create event with validated hash
@@ -126,12 +156,12 @@ class Event(Base):
             event_time=event_time,
             payload=payload,
             previous_hash=previous_hash,
-            hash=computed_hash
+            hash=computed_hash,
         )
 
 
 # Prevent updates to events at ORM level (events are immutable)
-@event.listens_for(Event, 'before_update')
+@event.listens_for(Event, "before_update")
 def prevent_event_updates(mapper, connection, target):
     """
     Events are append-only and cannot be modified after creation.

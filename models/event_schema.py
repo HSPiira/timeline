@@ -1,29 +1,46 @@
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, DateTime, JSON, UniqueConstraint
-from sqlalchemy.sql import func
+from typing import Any
+
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
 from core.database import Base
-from utils.generators import generate_cuid
+from models.mixins import MultiTenantModel
 
 
-class EventSchema(Base):
+class EventSchema(MultiTenantModel, Base):
     """
     Event schema model for tenant-specific payload validation.
+
+    Inherits from MultiTenantModel:
+        - id: CUID primary key
+        - tenant_id: Foreign key to tenant
+        - created_at: Creation timestamp
+        - updated_at: Last update timestamp
 
     Immutable versioning: Once created, schema_definition cannot be changed.
     Evolution happens through new versions with incremented version numbers.
     """
+
     __tablename__ = "event_schema"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
-    event_type = Column(String, nullable=False, index=True)
-    schema_definition = Column(JSON, nullable=False)  # Immutable after creation
-    version = Column(Integer, nullable=False)  # Auto-incremented per event_type
-    is_active = Column(Boolean, nullable=False, default=False)  # Must be explicitly activated
-    created_by = Column(String, ForeignKey("user.id"), nullable=True)  # Audit trail
+    event_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    schema_definition: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False
+    )  # Immutable after creation
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )  # Auto-incremented per event_type
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )  # Must be explicitly activated
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    # Additional audit field (beyond MultiTenantModel)
+    created_by: Mapped[str | None] = mapped_column(
+        String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "event_type", "version", name="uq_tenant_event_type_version"),
+        UniqueConstraint(
+            "tenant_id", "event_type", "version", name="uq_tenant_event_type_version"
+        ),
     )

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Index, String
+from sqlalchemy import Index, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
 from models.mixins import MultiTenantModel
@@ -18,7 +19,7 @@ class Subject(MultiTenantModel, Base):
     __tablename__ = "subject"
 
     # Business fields
-    subject_type = Column(String, nullable=False, index=True)
-    external_ref = Column(String, index=True)
+    subject_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    external_ref: Mapped[str | None] = mapped_column(String, index=True)
 
     __table_args__ = (Index("ix_subject_tenant_type", "tenant_id", "subject_type"),)

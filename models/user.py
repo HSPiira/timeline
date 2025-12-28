@@ -1,22 +1,27 @@
-from sqlalchemy import Boolean, Column, String, ForeignKey, DateTime, UniqueConstraint
-from sqlalchemy.sql import func
+from sqlalchemy import Boolean, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
 from core.database import Base
-from utils.generators import generate_cuid
+from models.mixins import MultiTenantModel
 
 
-class User(Base):
-    """User model for authentication"""
+class User(MultiTenantModel, Base):
+    """
+    User model for authentication.
+
+    Inherits from MultiTenantModel:
+        - id: CUID primary key
+        - tenant_id: Foreign key to tenant
+        - created_at: Creation timestamp
+        - updated_at: Last update timestamp
+    """
+
     __tablename__ = "user"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
-    username = Column(String, nullable=False)
-    email = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    is_active = Column(Boolean, nullable=False, default=True) 
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    username: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "username", name="uq_tenant_username"),

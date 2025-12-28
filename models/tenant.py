@@ -1,4 +1,5 @@
-from sqlalchemy import CheckConstraint, Column, String
+from sqlalchemy import CheckConstraint, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
 from core.enums import TenantStatus
@@ -16,9 +17,9 @@ class Tenant(CuidMixin, TimestampMixin, Base):
     __tablename__ = "tenant"
 
     # Business fields
-    code = Column(String, unique=True, nullable=False, index=True)
-    name = Column(String, nullable=False)
-    status = Column(
+    code: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(
         String, nullable=False, default=TenantStatus.ACTIVE.value, index=True
     )
 

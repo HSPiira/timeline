@@ -10,8 +10,11 @@ Audit Levels:
     - UserAuditMixin: Adds user tracking (created_by, updated_by, deleted_by)
     - FullAuditMixin: Complete audit trail with version tracking and metadata
 """
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String
-from sqlalchemy.ext.declarative import declared_attr
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import func
 
 from utils.generators import generate_cuid
@@ -31,8 +34,8 @@ class CuidMixin:
     """
 
     @declared_attr
-    def id(cls):
-        return Column(String, primary_key=True, default=generate_cuid)
+    def id(cls) -> Mapped[str]:
+        return mapped_column(String, primary_key=True, default=generate_cuid)
 
 
 class TenantMixin:
@@ -49,8 +52,8 @@ class TenantMixin:
     """
 
     @declared_attr
-    def tenant_id(cls):
-        return Column(
+    def tenant_id(cls) -> Mapped[str]:
+        return mapped_column(
             String,
             ForeignKey("tenant.id", ondelete="CASCADE"),
             nullable=False,
@@ -75,14 +78,14 @@ class TimestampMixin:
     """
 
     @declared_attr
-    def created_at(cls):
-        return Column(
+    def created_at(cls) -> Mapped[datetime]:
+        return mapped_column(
             DateTime(timezone=True), server_default=func.now(), nullable=False
         )
 
     @declared_attr
-    def updated_at(cls):
-        return Column(
+    def updated_at(cls) -> Mapped[datetime]:
+        return mapped_column(
             DateTime(timezone=True),
             server_default=func.now(),
             onupdate=func.now(),
@@ -108,8 +111,8 @@ class SoftDeleteMixin:
     """
 
     @declared_attr
-    def deleted_at(cls):
-        return Column(DateTime(timezone=True), nullable=True, index=True)
+    def deleted_at(cls) -> Mapped[datetime | None]:
+        return mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
 
 class UserAuditMixin(TimestampMixin, SoftDeleteMixin):
@@ -139,8 +142,8 @@ class UserAuditMixin(TimestampMixin, SoftDeleteMixin):
     """
 
     @declared_attr
-    def created_by(cls):
-        return Column(
+    def created_by(cls) -> Mapped[str | None]:
+        return mapped_column(
             String,
             ForeignKey("user.id", ondelete="SET NULL"),
             nullable=True,
@@ -148,12 +151,16 @@ class UserAuditMixin(TimestampMixin, SoftDeleteMixin):
         )
 
     @declared_attr
-    def updated_by(cls):
-        return Column(String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    def updated_by(cls) -> Mapped[str | None]:
+        return mapped_column(
+            String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+        )
 
     @declared_attr
-    def deleted_by(cls):
-        return Column(String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    def deleted_by(cls) -> Mapped[str | None]:
+        return mapped_column(
+            String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+        )
 
 
 class VersionedMixin:
@@ -183,8 +190,8 @@ class VersionedMixin:
     """
 
     @declared_attr
-    def version(cls):
-        return Column(Integer, default=1, nullable=False)
+    def version(cls) -> Mapped[int]:
+        return mapped_column(Integer, default=1, nullable=False)
 
 
 class FullAuditMixin(UserAuditMixin, VersionedMixin):
@@ -224,8 +231,8 @@ class FullAuditMixin(UserAuditMixin, VersionedMixin):
     """
 
     @declared_attr
-    def audit_metadata(cls):
-        return Column(JSON, nullable=True)
+    def audit_metadata(cls) -> Mapped[dict[str, Any] | None]:
+        return mapped_column(JSON, nullable=True)
 
 
 class MultiTenantModel(CuidMixin, TenantMixin, TimestampMixin):
@@ -244,8 +251,8 @@ class MultiTenantModel(CuidMixin, TenantMixin, TimestampMixin):
             __tablename__ = "my_model"
 
             # Your custom columns here
-            name = Column(String, nullable=False)
-            description = Column(String)
+            name: Mapped[str]
+            description: Mapped[Optional[str]]
     """
 
     __abstract__ = True
@@ -267,7 +274,7 @@ class AuditedMultiTenantModel(CuidMixin, TenantMixin, UserAuditMixin):
             __tablename__ = "my_model"
 
             # Your custom columns here
-            name = Column(String, nullable=False)
+            name: Mapped[str]
 
         # In service:
         instance.created_by = current_user.id
@@ -293,8 +300,8 @@ class FullyAuditedMultiTenantModel(CuidMixin, TenantMixin, FullAuditMixin):
         class Transaction(FullyAuditedMultiTenantModel, Base):
             __tablename__ = "transaction"
 
-            amount = Column(Numeric, nullable=False)
-            status = Column(String, nullable=False)
+            amount: Mapped[Decimal]
+            status: Mapped[str]
 
         # In service:
         transaction.created_by = current_user.id

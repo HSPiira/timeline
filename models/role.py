@@ -1,24 +1,38 @@
-from sqlalchemy import Boolean, Column, String, ForeignKey, DateTime, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
 from core.database import Base
-from utils.generators import generate_cuid
+from models.mixins import MultiTenantModel
 
-class Role(Base):
-    """Tenant-scoped roles (e.g., 'admin', 'auditor', 'agent')"""
+
+class Role(MultiTenantModel, Base):
+    """
+    Tenant-scoped roles (e.g., 'admin', 'auditor', 'agent').
+
+    Inherits from MultiTenantModel:
+        - id: CUID primary key
+        - tenant_id: Foreign key to tenant
+        - created_at: Creation timestamp
+        - updated_at: Last update timestamp
+    """
+
     __tablename__ = "role"
-    
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(String, ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    #Role metadata
-    code = Column(String, nullable=False) #e.g., 'admin', 'auditor', 'agent'
-    name = Column(String, nullable=False) #Display name
-    description = Column(Text, nullable=True) #Optional description
-    is_system = Column(Boolean, nullable=False, default=False) #System roles cannot be modified or deleted
-    is_active = Column(Boolean, nullable=False, default=True) #Soft delete flag
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    # Role metadata
+    code: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # e.g., 'admin', 'auditor', 'agent'
+    name: Mapped[str] = mapped_column(String, nullable=False)  # Display name
+    description: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # Optional description
+    is_system: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )  # System roles cannot be modified or deleted
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )  # Soft delete flag
 
     __table_args__ = (
-        UniqueConstraint('tenant_id', 'code', name='uq_role_tenant_code'),
+        UniqueConstraint("tenant_id", "code", name="uq_role_tenant_code"),
     )

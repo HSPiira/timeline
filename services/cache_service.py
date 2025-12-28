@@ -1,9 +1,14 @@
 """Redis-based caching service for performance optimization"""
+from __future__ import annotations
+
 import json
 import logging
-from typing import Optional, Any, Callable
+from collections.abc import Callable
 from functools import wraps
+from typing import Any
+
 import redis.asyncio as redis
+
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +26,7 @@ class CacheService:
     Expected performance improvement: 90% reduction in repeated queries
     """
 
-    def __init__(self, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, redis_client: redis.Redis | None = None):
         """
         Initialize cache service
 
@@ -40,17 +45,23 @@ class CacheService:
                     host=self.settings.redis_host,
                     port=self.settings.redis_port,
                     db=self.settings.redis_db,
-                    password=self.settings.redis_password if self.settings.redis_password else None,
-                    decode_responses=True,  # Auto-decode bytes to strings
+                    password=self.settings.redis_password
+                    if self.settings.redis_password
+                    else None,
+                    decode_responses=True,
                     socket_connect_timeout=5,
                     socket_keepalive=True,
                 )
                 # Test connection
                 await self.redis.ping()
                 self._connected = True
-                logger.info(f"Redis cache connected: {self.settings.redis_host}:{self.settings.redis_port}")
+                logger.info(
+                    f"Redis cache connected: {self.settings.redis_host}:{self.settings.redis_port}"
+                )
             except (redis.ConnectionError, redis.TimeoutError) as e:
-                logger.warning(f"Redis connection failed: {e}. Cache disabled - falling back to database queries.")
+                logger.warning(
+                    f"Redis connection failed: {e}. Cache disabled - falling back to database queries."
+                )
                 self._connected = False
                 self.redis = None
 
@@ -65,7 +76,7 @@ class CacheService:
         """Check if Redis is connected and available"""
         return self._connected and self.redis is not None
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """
         Get value from cache
 
@@ -75,11 +86,12 @@ class CacheService:
         Returns:
             Cached value (deserialized from JSON) or None if not found/unavailable
         """
-        if not self.is_available():
+        if not self.is_available() or self.redis is None:
             return None
 
+        redis_client = self.redis  # Local variable for type narrowing
         try:
-            value = await self.redis.get(key)
+            value = await redis_client.get(key)
             if value:
                 logger.debug(f"Cache HIT: {key}")
                 return json.loads(value)
@@ -101,12 +113,13 @@ class CacheService:
         Returns:
             True if successful, False otherwise
         """
-        if not self.is_available():
+        if not self.is_available() or self.redis is None:
             return False
 
+        redis_client = self.redis  # Local variable for type narrowing
         try:
             serialized = json.dumps(value)
-            await self.redis.setex(key, ttl, serialized)
+            await redis_client.setex(key, ttl, serialized)
             logger.debug(f"Cache SET: {key} (TTL: {ttl}s)")
             return True
         except Exception as e:
@@ -123,11 +136,12 @@ class CacheService:
         Returns:
             True if successful, False otherwise
         """
-        if not self.is_available():
+        if not self.is_available() or self.redis is None:
             return False
 
+        redis_client = self.redis  # Local variable for type narrowing
         try:
-            await self.redis.delete(key)
+            await redis_client.delete(key)
             logger.debug(f"Cache DELETE: {key}")
             return True
         except Exception as e:
@@ -144,14 +158,15 @@ class CacheService:
         Returns:
             Number of keys deleted
         """
-        if not self.is_available():
+        if not self.is_available() or self.redis is None:
             return 0
 
+        redis_client = self.redis  # Local variable for type narrowing
         try:
             # Scan for matching keys (cursor-based for large datasets)
             deleted = 0
-            async for key in self.redis.scan_iter(match=pattern):
-                await self.redis.delete(key)
+            async for key in redis_client.scan_iter(match=pattern):
+                await redis_client.delete(key)
                 deleted += 1
 
             if deleted > 0:
@@ -168,11 +183,12 @@ class CacheService:
         Returns:
             True if successful, False otherwise
         """
-        if not self.is_available():
+        if not self.is_available() or self.redis is None:
             return False
 
+        redis_client = self.redis  # Local variable for type narrowing
         try:
-            await self.redis.flushdb()
+            await redis_client.flushdb()
             logger.warning("Cache CLEARED: All keys deleted")
             return True
         except Exception as e:
@@ -180,11 +196,7 @@ class CacheService:
             return False
 
 
-def cached(
-    key_prefix: str,
-    ttl: int = 300,
-    key_builder: Optional[Callable] = None
-):
+def cached(key_prefix: str, ttl: int = 300, key_builder: Callable | None = None):
     """
     Decorator for caching async function results
 
@@ -200,21 +212,26 @@ def cached(
             # Cache key will be: permissions:user_id:tenant_id
             return await fetch_from_db(user_id, tenant_id)
     """
+
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
             # Extract cache service (assume first arg or 'cache' kwarg)
-            cache: Optional[CacheService] = None
+            cache: CacheService | None = None
 
             # Try to find cache service in args/kwargs
             if args and isinstance(args[0], CacheService):
                 cache = args[0]
                 func_args = args[1:]
-            elif 'cache' in kwargs:
-                cache = kwargs['cache']
+            elif "cache" in kwargs:
+                cache = kwargs["cache"]
                 func_args = args
             else:
                 # No cache service found - execute without caching
+                return await func(*args, **kwargs)
+
+            # Type narrowing: ensure cache is not None
+            if cache is None:
                 return await func(*args, **kwargs)
 
             # Build cache key
@@ -223,7 +240,9 @@ def cached(
             else:
                 # Default: combine prefix with all args/kwargs
                 key_parts = [str(arg) for arg in func_args]
-                key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()) if k != 'cache')
+                key_parts.extend(
+                    f"{k}={v}" for k, v in sorted(kwargs.items()) if k != "cache"
+                )
                 cache_key = f"{key_prefix}:{':'.join(key_parts)}"
 
             # Try to get from cache
@@ -240,4 +259,5 @@ def cached(
             return result
 
         return wrapper
+
     return decorator

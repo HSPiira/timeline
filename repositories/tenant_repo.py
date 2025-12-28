@@ -1,4 +1,4 @@
-from typing import Optional
+from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,15 +18,13 @@ class TenantRepository(BaseRepository[Tenant]):
     Cache TTL: 15 minutes (configurable)
     """
 
-    def __init__(
-        self, db: AsyncSession, cache_service: Optional["CacheService"] = None
-    ):
+    def __init__(self, db: AsyncSession, cache_service: CacheService | None = None):
         super().__init__(db, Tenant)
         self.cache = cache_service
         self.settings = get_settings()
         self.cache_ttl = self.settings.cache_ttl_tenants
 
-    async def get_by_id(self, tenant_id: str) -> Optional[Tenant]:
+    async def get_by_id(self, tenant_id: str) -> Tenant | None:
         """
         Get tenant by ID with caching
 
@@ -35,6 +33,7 @@ class TenantRepository(BaseRepository[Tenant]):
 
         # Try cache first
         cache_key = f"tenant:id:{tenant_id}"
+        tenant: Tenant | None
         if self.cache and self.cache.is_available():
             cached = await self.cache.get(cache_key)
             if cached is not None:
@@ -63,7 +62,7 @@ class TenantRepository(BaseRepository[Tenant]):
 
         return tenant
 
-    async def get_by_code(self, code: str) -> Optional[Tenant]:
+    async def get_by_code(self, code: str) -> Tenant | None:
         """
         Get tenant by unique code with caching
 
@@ -72,6 +71,7 @@ class TenantRepository(BaseRepository[Tenant]):
 
         # Try cache first
         cache_key = f"tenant:code:{code}"
+        tenant: Tenant | None
         if self.cache and self.cache.is_available():
             cached = await self.cache.get(cache_key)
             if cached is not None:
@@ -117,7 +117,7 @@ class TenantRepository(BaseRepository[Tenant]):
 
     async def update_status(
         self, tenant_id: str, status: TenantStatus
-    ) -> Optional[Tenant]:
+    ) -> Tenant | None:
         """Update tenant status and invalidate cache"""
         tenant = await self.get_by_id(tenant_id)
         if tenant:

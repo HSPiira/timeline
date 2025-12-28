@@ -1,9 +1,12 @@
+from __future__ import annotations
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+
+from core.config import get_settings
 from models.event_schema import EventSchema
 from repositories.base import BaseRepository
-from typing import Optional, List
-from core.config import get_settings
+from services.cache_service import CacheService
 
 
 class EventSchemaRepository(BaseRepository[EventSchema]):
@@ -14,7 +17,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
     Cache TTL: 10 minutes (configurable)
     """
 
-    def __init__(self, db: AsyncSession, cache_service: Optional['CacheService'] = None):
+    def __init__(self, db: AsyncSession, cache_service: CacheService | None = None):
         super().__init__(db, EventSchema)
         self.cache = cache_service
         self.settings = get_settings()
@@ -23,18 +26,19 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
     async def get_next_version(self, tenant_id: str, event_type: str) -> int:
         """Get the next version number for an event_type (auto-increment)"""
         result = await self.db.execute(
-            select(func.max(EventSchema.version))
-            .where(
+            select(func.max(EventSchema.version)).where(
                 and_(
                     EventSchema.tenant_id == tenant_id,
-                    EventSchema.event_type == event_type
+                    EventSchema.event_type == event_type,
                 )
             )
         )
         max_version = result.scalar()
         return (max_version or 0) + 1
 
-    async def get_active_schema(self, tenant_id: str, event_type: str) -> Optional[EventSchema]:
+    async def get_active_schema(
+        self, tenant_id: str, event_type: str
+    ) -> EventSchema | None:
         """
         Get active schema for event type and tenant
 
@@ -44,6 +48,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
 
         # Try cache first
         cache_key = f"schema:active:{tenant_id}:{event_type}"
+        schema: EventSchema | None
         if self.cache and self.cache.is_available():
             cached = await self.cache.get(cache_key)
             if cached is not None:
@@ -60,7 +65,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
                 and_(
                     EventSchema.tenant_id == tenant_id,
                     EventSchema.event_type == event_type,
-                    EventSchema.is_active == True
+                    EventSchema.is_active.is_(True),
                 )
             )
             .order_by(EventSchema.version.desc())
@@ -71,14 +76,18 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
         # Cache for future requests (convert to dict for JSON serialization)
         if schema and self.cache and self.cache.is_available():
             schema_dict = {
-                'id': schema.id,
-                'tenant_id': schema.tenant_id,
-                'event_type': schema.event_type,
-                'version': schema.version,
-                'schema_definition': schema.schema_definition,
-                'is_active': schema.is_active,
-                'created_at': schema.created_at.isoformat() if schema.created_at else None,
-                'updated_at': schema.updated_at.isoformat() if schema.updated_at else None,
+                "id": schema.id,
+                "tenant_id": schema.tenant_id,
+                "event_type": schema.event_type,
+                "version": schema.version,
+                "schema_definition": schema.schema_definition,
+                "is_active": schema.is_active,
+                "created_at": schema.created_at.isoformat()
+                if schema.created_at
+                else None,
+                "updated_at": schema.updated_at.isoformat()
+                if schema.updated_at
+                else None,
             }
             await self.cache.set(cache_key, schema_dict, ttl=self.cache_ttl)
 
@@ -86,14 +95,14 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
 
     async def get_by_version(
         self, tenant_id: str, event_type: str, version: int
-    ) -> Optional[EventSchema]:
+    ) -> EventSchema | None:
         """Get specific schema version"""
         result = await self.db.execute(
             select(EventSchema).where(
                 and_(
                     EventSchema.tenant_id == tenant_id,
                     EventSchema.event_type == event_type,
-                    EventSchema.version == version
+                    EventSchema.version == version,
                 )
             )
         )
@@ -101,14 +110,14 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
 
     async def get_all_for_event_type(
         self, tenant_id: str, event_type: str
-    ) -> List[EventSchema]:
+    ) -> list[EventSchema]:
         """Get all schema versions for event type"""
         result = await self.db.execute(
             select(EventSchema)
             .where(
                 and_(
                     EventSchema.tenant_id == tenant_id,
-                    EventSchema.event_type == event_type
+                    EventSchema.event_type == event_type,
                 )
             )
             .order_by(EventSchema.version.desc())
@@ -117,7 +126,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
 
     async def get_all_for_tenant(
         self, tenant_id: str, skip: int = 0, limit: int = 100
-    ) -> List[EventSchema]:
+    ) -> list[EventSchema]:
         """Get all schemas for tenant with pagination"""
         result = await self.db.execute(
             select(EventSchema)
@@ -128,25 +137,29 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
         )
         return list(result.scalars().all())
 
-    async def deactivate_schema(self, schema_id: str) -> Optional[EventSchema]:
+    async def deactivate_schema(self, schema_id: str) -> EventSchema | None:
         """Deactivate a schema and invalidate cache"""
         schema = await self.get_by_id(schema_id)
         if schema:
             schema.is_active = False
             updated = await self.update(schema)
             # Invalidate cache
-            await self._invalidate_schema_cache(schema.tenant_id, schema.event_type)
+            await self._invalidate_schema_cache(
+                str(schema.tenant_id), str(schema.event_type)
+            )
             return updated
         return None
 
-    async def activate_schema(self, schema_id: str) -> Optional[EventSchema]:
+    async def activate_schema(self, schema_id: str) -> EventSchema | None:
         """Activate a schema and invalidate cache"""
         schema = await self.get_by_id(schema_id)
         if schema:
             schema.is_active = True
             updated = await self.update(schema)
             # Invalidate cache
-            await self._invalidate_schema_cache(schema.tenant_id, schema.event_type)
+            await self._invalidate_schema_cache(
+                str(schema.tenant_id), str(schema.event_type)
+            )
             return updated
         return None
 

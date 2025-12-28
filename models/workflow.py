@@ -5,15 +5,26 @@ Workflows define triggers and actions:
 - Trigger: event_type to watch for
 - Actions: what to do when triggered (create event, notify, etc.)
 """
-from sqlalchemy import Column, String, Text, Boolean, ForeignKey, Integer, JSON, DateTime
-from sqlalchemy.sql import func
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
 from core.database import Base
-from utils.generators import generate_cuid
+from models.mixins import AuditedMultiTenantModel, MultiTenantModel
 
 
-class Workflow(Base):
+class Workflow(AuditedMultiTenantModel, Base):
     """
     Event-driven workflow definition.
+
+    Inherits from AuditedMultiTenantModel:
+        - id: CUID primary key
+        - tenant_id: Foreign key to tenant
+        - created_at, updated_at: Timestamps
+        - created_by, updated_by, deleted_by: User tracking
+        - deleted_at: Soft delete support
 
     Example workflow:
     {
@@ -38,133 +49,111 @@ class Workflow(Base):
         ]
     }
     """
+
     __tablename__ = "workflow"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(
-        String,
-        ForeignKey("tenant.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
-    )
-
     # Workflow metadata
-    name = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    is_active = Column(Boolean, nullable=False, default=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Trigger configuration
-    trigger_event_type = Column(
+    trigger_event_type: Mapped[str] = mapped_column(
         String,
         nullable=False,
         index=True,
-        comment="Event type that triggers this workflow"
+        comment="Event type that triggers this workflow",
     )
-    trigger_conditions = Column(
-        JSON,
-        nullable=True,
-        comment="Optional JSON conditions (JSONPath expressions)"
+    trigger_conditions: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="Optional JSON conditions (JSONPath expressions)"
     )
 
     # Actions to execute
-    actions = Column(
+    actions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON,
         nullable=False,
-        comment="Array of actions to execute [{type, params}, ...]"
+        comment="Array of actions to execute [{type, params}, ...]",
     )
 
     # Execution settings
-    max_executions_per_day = Column(
+    max_executions_per_day: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        comment="Rate limit: max executions per day (null = unlimited)"
+        comment="Rate limit: max executions per day (null = unlimited)",
     )
-    execution_order = Column(
+    execution_order: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         default=0,
-        comment="Execution priority (lower = earlier)"
+        comment="Execution priority (lower = earlier)",
     )
-
-    # Audit
-    created_by = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
         return f"<Workflow(id={self.id}, name={self.name}, trigger={self.trigger_event_type})>"
 
 
-class WorkflowExecution(Base):
+class WorkflowExecution(MultiTenantModel, Base):
     """
     Audit trail for workflow executions.
 
+    Inherits from MultiTenantModel:
+        - id: CUID primary key
+        - tenant_id: Foreign key to tenant
+        - created_at: Creation timestamp
+        - updated_at: Last update timestamp
+
     Tracks each time a workflow is triggered and executed.
     """
+
     __tablename__ = "workflow_execution"
 
-    id = Column(String, primary_key=True, default=generate_cuid)
-    tenant_id = Column(
-        String,
-        ForeignKey("tenant.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
-    )
-    workflow_id = Column(
+    workflow_id: Mapped[str] = mapped_column(
         String,
         ForeignKey("workflow.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # Trigger context
-    triggered_by_event_id = Column(
+    triggered_by_event_id: Mapped[str | None] = mapped_column(
         String,
         ForeignKey("event.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="Event that triggered this workflow"
+        comment="Event that triggered this workflow",
     )
-    triggered_by_subject_id = Column(
-        String,
-        ForeignKey("subject.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True
+    triggered_by_subject_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("subject.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Execution status
-    status = Column(
+    status: Mapped[str] = mapped_column(
         String,
         nullable=False,
         default="pending",
-        comment="pending | running | completed | failed"
+        comment="pending | running | completed | failed",
     )
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Execution results
-    actions_executed = Column(
+    actions_executed: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         default=0,
-        comment="Number of actions successfully executed"
+        comment="Number of actions successfully executed",
     )
-    actions_failed = Column(
-        Integer,
-        nullable=False,
-        default=0,
-        comment="Number of actions that failed"
+    actions_failed: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="Number of actions that failed"
     )
-    execution_log = Column(
-        JSON,
-        nullable=True,
-        comment="Detailed execution log with action results"
+    execution_log: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True, comment="Detailed execution log with action results"
     )
-    error_message = Column(Text, nullable=True)
-
-    # Audit
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def __repr__(self):
         return f"<WorkflowExecution(id={self.id}, workflow_id={self.workflow_id}, status={self.status})>"
