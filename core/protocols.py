@@ -1,10 +1,12 @@
-from typing import Protocol, Optional, List, TYPE_CHECKING
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from models.event import Event
-    from models.subject import Subject
     from models.event_schema import EventSchema
+    from models.subject import Subject
     from schemas.event import EventCreate
 
 
@@ -18,7 +20,7 @@ class IHashService(Protocol):
         event_type: str,
         event_time: datetime,
         payload: dict,
-        previous_hash: Optional[str]
+        previous_hash: str | None,
     ) -> str:
         """Compute hash for event data"""
         ...
@@ -27,33 +29,29 @@ class IHashService(Protocol):
 class IEventRepository(Protocol):
     """Protocol for event repository (DIP)"""
 
-    async def get_last_hash(self, subject_id: str, tenant_id: str) -> Optional[str]:
+    async def get_last_hash(self, subject_id: str, tenant_id: str) -> str | None:
         """Get the hash of the most recent event for a subject within a tenant"""
         ...
 
-    async def get_last_event(
-        self, subject_id: str, tenant_id: str
-    ) -> Optional["Event"]:
+    async def get_last_event(self, subject_id: str, tenant_id: str) -> Event | None:
         """Get the most recent event for a subject within a tenant"""
         ...
 
     async def create_event(
         self,
         tenant_id: str,
-        data: "EventCreate",
+        data: EventCreate,
         event_hash: str,
-        previous_hash: Optional[str]
-    ) -> "Event":
+        previous_hash: str | None,
+    ) -> Event:
         """Create a new event with computed hash"""
         ...
 
-    async def get_by_id(self, event_id: str) -> Optional["Event"]:
+    async def get_by_id(self, event_id: str) -> Event | None:
         """Get event by ID"""
         ...
 
-    async def get_by_subject(
-        self, subject_id: str, tenant_id: str
-    ) -> List["Event"]:
+    async def get_by_subject(self, subject_id: str, tenant_id: str) -> list[Event]:
         """Get all events for a subject within a tenant"""
         ...
 
@@ -61,35 +59,31 @@ class IEventRepository(Protocol):
 class ISubjectRepository(Protocol):
     """Protocol for subject repository (DIP)"""
 
-    async def get_by_id(self, subject_id: str) -> Optional["Subject"]:
+    async def get_by_id(self, subject_id: str) -> Subject | None:
         """Get subject by ID"""
         ...
 
     async def get_by_id_and_tenant(
         self, subject_id: str, tenant_id: str
-    ) -> Optional["Subject"]:
+    ) -> Subject | None:
         """Get subject by ID and verify it belongs to the tenant"""
         ...
 
     async def get_by_tenant(
         self, tenant_id: str, skip: int = 0, limit: int = 100
-    ) -> List["Subject"]:
+    ) -> list[Subject]:
         """Get all subjects for a tenant with pagination"""
         ...
 
     async def get_by_type(
-        self,
-        tenant_id: str,
-        subject_type: str,
-        skip: int = 0,
-        limit: int = 100
-    ) -> List["Subject"]:
+        self, tenant_id: str, subject_type: str, skip: int = 0, limit: int = 100
+    ) -> list[Subject]:
         """Get all subjects of a specific type for a tenant"""
         ...
 
     async def get_by_external_ref(
         self, tenant_id: str, external_ref: str
-    ) -> Optional["Subject"]:
+    ) -> Subject | None:
         """Get subject by external reference"""
         ...
 
@@ -97,25 +91,25 @@ class ISubjectRepository(Protocol):
 class IEventSchemaRepository(Protocol):
     """Protocol for event schema repository (DIP)"""
 
-    async def get_by_id(self, schema_id: str) -> Optional["EventSchema"]:
+    async def get_by_id(self, schema_id: str) -> EventSchema | None:
         """Get schema by ID"""
         ...
 
     async def get_by_version(
         self, tenant_id: str, event_type: str, version: int
-    ) -> Optional["EventSchema"]:
+    ) -> EventSchema | None:
         """Get specific schema version"""
         ...
 
     async def get_active_schema(
         self, tenant_id: str, event_type: str
-    ) -> Optional["EventSchema"]:
+    ) -> EventSchema | None:
         """Get active schema for event type and tenant"""
         ...
 
     async def get_all_for_event_type(
         self, tenant_id: str, event_type: str
-    ) -> List["EventSchema"]:
+    ) -> list[EventSchema]:
         """Get all schema versions for event type"""
         ...
 
@@ -128,11 +122,7 @@ class IEventService(Protocol):
     """Protocol for event service (DIP)"""
 
     async def create_event(
-        self,
-        tenant_id: str,
-        data: "EventCreate",
-        *,
-        trigger_workflows: bool = True
-    ) -> "Event":
+        self, tenant_id: str, data: EventCreate, *, trigger_workflows: bool = True
+    ) -> Event:
         """Create a new event with cryptographic chaining"""
         ...

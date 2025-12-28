@@ -177,10 +177,18 @@ no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
+exclude = [
+    "^alembic/",
+    "^scripts/",
+]
 
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["aiofiles", "aiofiles.*"]
+ignore_missing_imports = true
 
 # Pytest configuration
 [tool.pytest.ini_options]
@@ -225,4 +233,9 @@ exclude_lines = [
 # Bandit security configuration
 [tool.bandit]
 exclude_dirs = ["tests", "alembic/versions"]
-skips = ["B101", "B601"]  # Skip assert_used and paramiko_calls
+skips = [
+    "B101",  # assert_used - We use assertions for type narrowing
+    "B601",  # paramiko_calls
+    "B105",  # hardcoded_password_string - False positives on OAuth endpoint URLs
+    "B106",  # hardcoded_password_funcarg - False positives on OAuth token types and endpoint URLs
+]

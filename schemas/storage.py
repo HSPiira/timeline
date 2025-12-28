@@ -1,14 +1,15 @@
 """Pydantic schemas for document upload/download operations."""
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class DocumentUploadResponse(BaseModel):
     """Response after successful document upload"""
+
     id: str
     subject_id: str
-    event_id: Optional[str]
+    event_id: str | None
     document_type: str
     filename: str
     original_filename: str

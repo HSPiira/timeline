@@ -1,26 +1,25 @@
 """Shared test fixtures for pytest"""
+import asyncio
 import sys
 from pathlib import Path
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from core.auth import create_access_token, get_password_hash
+from core.database import Base, get_db
+from main import app
+from models.subject import Subject
+from models.tenant import Tenant
+from models.user import User
+
+# Test database URL - use a separate test database
+TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost/timeline_test"
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-
-import pytest
-import asyncio
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-
-from main import app
-from core.database import Base, get_db
-from core.auth import create_access_token
-from models.tenant import Tenant
-from models.user import User
-from models.subject import Subject
-from core.security import get_password_hash
-
-# Test database URL - use a separate test database
-TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost/timeline_test"
 
 
 @pytest.fixture(scope="session")
@@ -53,7 +52,7 @@ async def test_db(test_engine):
         class_=AsyncSession,
         expire_on_commit=False,
         autoflush=False,
-        autocommit=False
+        autocommit=False,
     )
 
     async with async_session() as session:
@@ -63,12 +62,15 @@ async def test_db(test_engine):
 @pytest.fixture
 async def client(test_db):
     """HTTP client for API testing"""
+    from httpx import ASGITransport
+
     async def override_get_db():
         yield test_db
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()
@@ -82,7 +84,7 @@ async def test_tenant(test_db):
         code="TEST",
         name="Test Tenant",
         status="active",
-        is_active=True
+        is_active=True,
     )
     test_db.add(tenant)
     await test_db.commit()
@@ -99,7 +101,7 @@ async def test_user(test_db, test_tenant):
         username="testuser",
         email="test@example.com",
         password_hash=get_password_hash("testpass123"),
-        is_active=True
+        is_active=True,
     )
     test_db.add(user)
     await test_db.commit()
@@ -110,9 +112,7 @@ async def test_user(test_db, test_tenant):
 @pytest.fixture
 def auth_headers(test_tenant, test_user):
     """Generate auth headers with JWT token"""
-    token = create_access_token(
-        data={"sub": test_user.id, "tenant_id": test_tenant.id}
-    )
+    token = create_access_token(data={"sub": test_user.id, "tenant_id": test_tenant.id})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -123,7 +123,7 @@ async def test_subject(test_db, test_tenant):
         id="test-subject-id",
         tenant_id=test_tenant.id,
         subject_type="user",
-        external_ref="test-user-123"
+        external_ref="test-user-123",
     )
     test_db.add(subject)
     await test_db.commit()

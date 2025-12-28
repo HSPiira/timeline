@@ -6,14 +6,11 @@ Verifies that event chains are intact and untampered by:
 2. Validating hash matches stored value
 3. Verifying previous_hash links form unbroken chain
 """
-from typing import List, Optional
 from datetime import datetime
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from models.event import Event
-from services.hash_service import HashService
 from repositories.event_repo import EventRepository
+from services.hash_service import HashService
 
 
 class VerificationResult:
@@ -26,10 +23,10 @@ class VerificationResult:
         event_time: datetime,
         sequence: int,
         is_valid: bool,
-        error_type: Optional[str] = None,
-        error_message: Optional[str] = None,
-        expected_hash: Optional[str] = None,
-        actual_hash: Optional[str] = None
+        error_type: str | None = None,
+        error_message: str | None = None,
+        expected_hash: str | None = None,
+        actual_hash: str | None = None,
     ):
         self.event_id = event_id
         self.event_type = event_type
@@ -47,14 +44,14 @@ class ChainVerificationResult:
 
     def __init__(
         self,
-        subject_id: Optional[str],
+        subject_id: str | None,
         tenant_id: str,
         total_events: int,
         valid_events: int,
         invalid_events: int,
         is_chain_valid: bool,
         verified_at: datetime,
-        event_results: List[VerificationResult]
+        event_results: list[VerificationResult],
     ):
         self.subject_id = subject_id
         self.tenant_id = tenant_id
@@ -81,9 +78,7 @@ class VerificationService:
         self.hash_service = hash_service
 
     async def verify_subject_chain(
-        self,
-        subject_id: str,
-        tenant_id: str
+        self, subject_id: str, tenant_id: str
     ) -> ChainVerificationResult:
         """
         Verify event chain for a single subject.
@@ -109,7 +104,7 @@ class VerificationService:
                 invalid_events=0,
                 is_chain_valid=True,  # Empty chain is valid
                 verified_at=datetime.utcnow(),
-                event_results=[]
+                event_results=[],
             )
 
         event_results = []
@@ -117,7 +112,7 @@ class VerificationService:
         invalid_count = 0
 
         for i, event in enumerate(events):
-            result = self._verify_event(event, events[i-1] if i > 0 else None, i)
+            result = self._verify_event(event, events[i - 1] if i > 0 else None, i)
             event_results.append(result)
 
             if result.is_valid:
@@ -133,13 +128,11 @@ class VerificationService:
             invalid_events=invalid_count,
             is_chain_valid=(invalid_count == 0),
             verified_at=datetime.utcnow(),
-            event_results=event_results
+            event_results=event_results,
         )
 
     async def verify_tenant_chains(
-        self,
-        tenant_id: str,
-        limit: Optional[int] = None
+        self, tenant_id: str, limit: int | None = None
     ) -> ChainVerificationResult:
         """
         Verify all event chains for a tenant.
@@ -152,7 +145,7 @@ class VerificationService:
             ChainVerificationResult aggregated across all subjects
         """
         # Get all events for tenant in chronological order
-        events = await self.event_repo.get_by_tenant(tenant_id, limit=limit)
+        events = await self.event_repo.get_by_tenant(tenant_id, limit=limit or 100)
 
         if not events:
             return ChainVerificationResult(
@@ -163,11 +156,11 @@ class VerificationService:
                 invalid_events=0,
                 is_chain_valid=True,
                 verified_at=datetime.utcnow(),
-                event_results=[]
+                event_results=[],
             )
 
         # Group events by subject for proper chain verification
-        events_by_subject = {}
+        events_by_subject: dict[str, list[Event]] = {}
         for event in events:
             if event.subject_id not in events_by_subject:
                 events_by_subject[event.subject_id] = []
@@ -176,8 +169,7 @@ class VerificationService:
         # Sort each subject's events chronologically (oldest first) for verification
         for subject_id in events_by_subject:
             events_by_subject[subject_id] = sorted(
-                events_by_subject[subject_id],
-                key=lambda e: e.event_time
+                events_by_subject[subject_id], key=lambda e: e.event_time
             )
 
         all_results = []
@@ -185,12 +177,10 @@ class VerificationService:
         invalid_count = 0
 
         # Verify each subject's chain
-        for subject_id, subject_events in events_by_subject.items():
+        for _, subject_events in events_by_subject.items():
             for i, event in enumerate(subject_events):
                 result = self._verify_event(
-                    event,
-                    subject_events[i-1] if i > 0 else None,
-                    i
+                    event, subject_events[i - 1] if i > 0 else None, i
                 )
                 all_results.append(result)
 
@@ -207,14 +197,11 @@ class VerificationService:
             invalid_events=invalid_count,
             is_chain_valid=(invalid_count == 0),
             verified_at=datetime.utcnow(),
-            event_results=all_results
+            event_results=all_results,
         )
 
     def _verify_event(
-        self,
-        event: Event,
-        previous_event: Optional[Event],
-        sequence: int
+        self, event: Event, previous_event: Event | None, sequence: int
     ) -> VerificationResult:
         """
         Verify a single event's integrity.
@@ -239,7 +226,7 @@ class VerificationService:
             event_type=event.event_type,
             event_time=event.event_time,
             payload=event.payload,
-            previous_hash=event.previous_hash
+            previous_hash=event.previous_hash,
         )
 
         # Check 1: Hash integrity
@@ -251,9 +238,9 @@ class VerificationService:
                 sequence=sequence,
                 is_valid=False,
                 error_type="HASH_MISMATCH",
-                error_message=f"Event hash does not match recomputed hash",
+                error_message="Event hash does not match recomputed hash",
                 expected_hash=computed_hash,
-                actual_hash=event.hash
+                actual_hash=event.hash,
             )
 
         # Check 2: Chain linkage
@@ -269,7 +256,7 @@ class VerificationService:
                     error_type="GENESIS_ERROR",
                     error_message=f"Genesis event should have null previous_hash, got: {event.previous_hash}",
                     expected_hash=None,
-                    actual_hash=event.previous_hash
+                    actual_hash=event.previous_hash,
                 )
         else:
             # Non-genesis event - previous_hash must match previous event's hash
@@ -283,7 +270,7 @@ class VerificationService:
                     error_type="MISSING_PREVIOUS",
                     error_message=f"Previous event not found for sequence {sequence}",
                     expected_hash="<previous_event>",
-                    actual_hash=None
+                    actual_hash=None,
                 )
 
             if event.previous_hash != previous_event.hash:
@@ -294,9 +281,9 @@ class VerificationService:
                     sequence=sequence,
                     is_valid=False,
                     error_type="CHAIN_BREAK",
-                    error_message=f"Chain broken: previous_hash does not match previous event's hash",
+                    error_message="Chain broken: previous_hash does not match previous event's hash",
                     expected_hash=previous_event.hash,
-                    actual_hash=event.previous_hash
+                    actual_hash=event.previous_hash,
                 )
 
         # All checks passed
@@ -309,5 +296,5 @@ class VerificationService:
             error_type=None,
             error_message=None,
             expected_hash=event.hash,
-            actual_hash=event.hash
+            actual_hash=event.hash,
         )

@@ -1,12 +1,13 @@
 """IMAP email provider implementation (works with iCloud, Yahoo, custom servers)"""
 import email
-from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from typing import Any
+
 import aioimaplib
 
-from integrations.email.protocols import IEmailProvider, EmailMessage, EmailProviderConfig
 from core.logging import get_logger
+from integrations.email.protocols import EmailMessage, EmailProviderConfig
 
 logger = get_logger(__name__)
 
@@ -15,23 +16,23 @@ class IMAPProvider:
     """IMAP provider for universal email access"""
 
     def __init__(self):
-        self._client: Optional[aioimaplib.IMAP4_SSL] = None
-        self._config: Optional[EmailProviderConfig] = None
+        self._client: aioimaplib.IMAP4_SSL | None = None
+        self._config: EmailProviderConfig | None = None
 
     async def connect(self, config: EmailProviderConfig) -> None:
         """Connect to IMAP server"""
         self._config = config
 
         # Get IMAP server and port from connection params
-        imap_server = config.connection_params.get('imap_server')
-        imap_port = config.connection_params.get('imap_port', 993)
+        imap_server = config.connection_params.get("imap_server")
+        imap_port = config.connection_params.get("imap_port", 993)
 
         if not imap_server:
             raise ValueError("imap_server required in connection_params")
 
         # Get credentials
-        username = config.credentials.get('username', config.email_address)
-        password = config.credentials.get('password')
+        username = config.credentials.get("username", config.email_address)
+        password = config.credentials.get("password")
 
         if not password:
             raise ValueError("password required in credentials")
@@ -54,23 +55,21 @@ class IMAPProvider:
             logger.info("Disconnected from IMAP server")
 
     async def fetch_messages(
-        self,
-        since: Optional[datetime] = None,
-        limit: int = 100
-    ) -> List[EmailMessage]:
+        self, since: datetime | None = None, limit: int = 100
+    ) -> list[EmailMessage]:
         """Fetch messages from IMAP server"""
         if not self._client:
             raise RuntimeError("Not connected to IMAP server")
 
         # Select INBOX
-        await self._client.select('INBOX')
+        await self._client.select("INBOX")
 
         # Build search criteria
         if since:
             date_str = since.strftime("%d-%b-%Y")
-            search_criteria = f'SINCE {date_str}'
+            search_criteria = f"SINCE {date_str}"
         else:
-            search_criteria = 'ALL'
+            search_criteria = "ALL"
 
         # Search for messages
         _, msg_ids = await self._client.search(search_criteria)
@@ -92,10 +91,12 @@ class IMAPProvider:
         logger.info(f"Fetched {len(messages)} messages from IMAP")
         return messages
 
-    async def _fetch_and_parse_message(self, msg_id: bytes) -> Optional[EmailMessage]:
+    async def _fetch_and_parse_message(self, msg_id: bytes) -> EmailMessage | None:
         """Fetch and parse a single message"""
+        assert self._client is not None, "Client must be connected"
+
         # Fetch message
-        _, msg_data = await self._client.fetch(msg_id, '(RFC822 FLAGS)')
+        _, msg_data = await self._client.fetch(msg_id, "(RFC822 FLAGS)")
 
         if not msg_data or not msg_data[1]:
             return None
@@ -105,42 +106,48 @@ class IMAPProvider:
         email_message = email.message_from_bytes(email_body)
 
         # Extract fields
-        message_id = email_message.get('Message-ID', f'imap-{msg_id.decode()}')
-        from_address = email_message.get('From', '')
-        to_addresses = [addr.strip() for addr in email_message.get('To', '').split(',')]
-        subject = email_message.get('Subject', '')
+        message_id = email_message.get("Message-ID", f"imap-{msg_id.decode()}")
+        from_address = email_message.get("From", "")
+        to_addresses = [addr.strip() for addr in email_message.get("To", "").split(",")]
+        subject = email_message.get("Subject", "")
 
         # Parse date (parsedate_to_datetime returns timezone-aware datetime)
-        date_str = email_message.get('Date')
-        timestamp = parsedate_to_datetime(date_str) if date_str else datetime.now(timezone.utc)
+        date_str = email_message.get("Date")
+        if date_str:
+            try:
+                parsed_date = parsedate_to_datetime(date_str)
+                timestamp = parsed_date if parsed_date else datetime.now(UTC)
+            except (ValueError, TypeError):
+                timestamp = datetime.now(UTC)
+        else:
+            timestamp = datetime.now(UTC)
 
         # Extract flags
-        flags_str = msg_data[0].decode() if msg_data[0] else ''
-        is_read = '\\Seen' in flags_str
-        is_starred = '\\Flagged' in flags_str
+        flags_str = msg_data[0].decode() if msg_data[0] else ""
+        is_read = "\\Seen" in flags_str
+        is_starred = "\\Flagged" in flags_str
 
         # Check attachments
-        has_attachments = any(part.get_content_disposition() == 'attachment'
-                            for part in email_message.walk())
+        has_attachments = any(
+            part.get_content_disposition() == "attachment"
+            for part in email_message.walk()
+        )
 
         return EmailMessage(
             message_id=message_id,
-            thread_id=email_message.get('In-Reply-To'),
+            thread_id=email_message.get("In-Reply-To"),
             from_address=from_address,
             to_addresses=to_addresses,
             subject=subject,
             timestamp=timestamp,
-            labels=['INBOX'],
+            labels=["INBOX"],
             is_read=is_read,
             is_starred=is_starred,
             has_attachments=has_attachments,
-            provider_metadata={
-                'imap_uid': msg_id.decode(),
-                'flags': flags_str
-            }
+            provider_metadata={"imap_uid": msg_id.decode(), "flags": flags_str},
         )
 
-    async def setup_webhook(self, callback_url: str) -> Dict[str, Any]:
+    async def setup_webhook(self, callback_url: str) -> dict[str, Any]:
         """IMAP doesn't support webhooks"""
         raise NotImplementedError("IMAP does not support webhooks")
 

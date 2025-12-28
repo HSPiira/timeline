@@ -1,10 +1,11 @@
 """Integration tests for email synchronization"""
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from integrations.email.sync import UniversalEmailSync, AuthenticationError
-from integrations.email.protocols import EmailMessage, EmailProviderType
+import pytest
+
+from integrations.email.protocols import EmailMessage
+from integrations.email.sync import AuthenticationError, UniversalEmailSync
 from models.email_account import EmailAccount
 from models.subject import Subject
 from repositories.event_repo import EventRepository
@@ -18,7 +19,7 @@ async def test_email_account(test_db, test_tenant):
         id="email-subject-id",
         tenant_id=test_tenant.id,
         subject_type="email_account",
-        external_ref="test@example.com"
+        external_ref="test@example.com",
     )
     test_db.add(subject)
     await test_db.flush()
@@ -28,10 +29,10 @@ async def test_email_account(test_db, test_tenant):
         id="account-123",
         tenant_id=test_tenant.id,
         subject_id=subject.id,
-        provider_type=EmailProviderType.GMAIL,
+        provider_type="gmail",
         email_address="test@example.com",
         credentials_encrypted="encrypted_credentials",
-        is_active=True
+        is_active=True,
     )
     test_db.add(account)
     await test_db.commit()
@@ -49,12 +50,12 @@ def mock_email_messages():
             from_address="sender1@example.com",
             to_addresses=["test@example.com"],
             subject="Test Email 1",
-            timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
             labels=["INBOX"],
             is_read=False,
             is_starred=False,
             has_attachments=False,
-            provider_metadata={}
+            provider_metadata={},
         ),
         EmailMessage(
             message_id="msg2",
@@ -62,37 +63,41 @@ def mock_email_messages():
             from_address="sender2@example.com",
             to_addresses=["test@example.com"],
             subject="Test Email 2",
-            timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
             labels=["INBOX", "IMPORTANT"],
             is_read=True,
             is_starred=True,
             has_attachments=True,
-            provider_metadata={"size": 1024}
+            provider_metadata={"size": 1024},
         ),
     ]
 
 
 @pytest.mark.asyncio
-async def test_gmail_sync_creates_events(test_db, test_email_account, mock_email_messages):
+async def test_gmail_sync_creates_events(
+    test_db, test_email_account, mock_email_messages
+):
     """Test that Gmail sync creates events correctly"""
+    from repositories.event_schema_repo import EventSchemaRepository
+    from repositories.subject_repo import SubjectRepository
     from services.event_service import EventService
     from services.hash_service import HashService
-    from repositories.subject_repo import SubjectRepository
-    from repositories.event_schema_repo import EventSchemaRepository
 
     # Create event service
     event_service = EventService(
         event_repo=EventRepository(test_db),
         hash_service=HashService(),
         subject_repo=SubjectRepository(test_db),
-        schema_repo=EventSchemaRepository(test_db)
+        schema_repo=EventSchemaRepository(test_db),
     )
 
     # Create sync service
     sync_service = UniversalEmailSync(test_db, event_service)
 
     # Mock the provider
-    with patch('integrations.email.factory.EmailProviderFactory.create_provider') as mock_factory:
+    with patch(
+        "integrations.email.factory.EmailProviderFactory.create_provider"
+    ) as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.fetch_messages = AsyncMock(return_value=mock_email_messages)
@@ -100,25 +105,28 @@ async def test_gmail_sync_creates_events(test_db, test_email_account, mock_email
         mock_factory.return_value = mock_provider
 
         # Mock the encryptor
-        with patch('integrations.email.sync.CredentialEncryptor') as mock_encryptor_class:
+        with patch(
+            "integrations.email.sync.CredentialEncryptor"
+        ) as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor
 
             # Run sync
-            stats = await sync_service.sync_account(test_email_account, incremental=True)
+            stats = await sync_service.sync_account(
+                test_email_account, incremental=True
+            )
 
             # Verify stats
-            assert stats['messages_fetched'] == 2
-            assert stats['events_created'] == 2
-            assert stats['provider'] == EmailProviderType.GMAIL
-            assert stats['sync_type'] == 'incremental'
+            assert stats["messages_fetched"] == 2
+            assert stats["events_created"] == 2
+            assert stats["provider"] == "gmail"
+            assert stats["sync_type"] == "incremental"
 
             # Verify events were created
             event_repo = EventRepository(test_db)
             events = await event_repo.get_by_subject(
-                test_email_account.subject_id,
-                test_email_account.tenant_id
+                test_email_account.subject_id, test_email_account.tenant_id
             )
 
             assert len(events) == 2
@@ -138,61 +146,64 @@ async def test_gmail_sync_creates_events(test_db, test_email_account, mock_email
 
 
 @pytest.mark.asyncio
-async def test_email_sync_deduplication(test_db, test_email_account, mock_email_messages):
+async def test_email_sync_deduplication(
+    test_db, test_email_account, mock_email_messages
+):
     """Test that duplicate emails are not synced twice"""
+    from repositories.event_schema_repo import EventSchemaRepository
+    from repositories.subject_repo import SubjectRepository
     from services.event_service import EventService
     from services.hash_service import HashService
-    from repositories.subject_repo import SubjectRepository
-    from repositories.event_schema_repo import EventSchemaRepository
 
     event_service = EventService(
         event_repo=EventRepository(test_db),
         hash_service=HashService(),
         subject_repo=SubjectRepository(test_db),
-        schema_repo=EventSchemaRepository(test_db)
+        schema_repo=EventSchemaRepository(test_db),
     )
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch('integrations.email.factory.EmailProviderFactory.create_provider') as mock_factory:
+    with patch(
+        "integrations.email.factory.EmailProviderFactory.create_provider"
+    ) as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.fetch_messages = AsyncMock(return_value=mock_email_messages)
         mock_provider.disconnect = AsyncMock()
         mock_factory.return_value = mock_provider
 
-        with patch('integrations.email.sync.CredentialEncryptor') as mock_encryptor_class:
+        with patch(
+            "integrations.email.sync.CredentialEncryptor"
+        ) as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor
 
             # First sync
             stats1 = await sync_service.sync_account(test_email_account)
-            assert stats1['events_created'] == 2
+            assert stats1["events_created"] == 2
 
             # Second sync with same messages - should use batch deduplication
             stats2 = await sync_service.sync_account(test_email_account)
-            assert stats2['events_created'] == 0  # No duplicates created
-            assert stats2['messages_fetched'] == 2  # Still fetched messages
+            assert stats2["events_created"] == 0  # No duplicates created
+            assert stats2["messages_fetched"] == 2  # Still fetched messages
 
             # Verify only 2 events total
             event_repo = EventRepository(test_db)
             events = await event_repo.get_by_subject(
-                test_email_account.subject_id,
-                test_email_account.tenant_id
+                test_email_account.subject_id, test_email_account.tenant_id
             )
             assert len(events) == 2
 
 
 @pytest.mark.asyncio
-async def test_email_sync_batch_deduplication_performance(
-    test_db, test_email_account
-):
+async def test_email_sync_batch_deduplication_performance(test_db, test_email_account):
     """Test that batch deduplication is used (N+1 query fix)"""
+    from repositories.event_schema_repo import EventSchemaRepository
+    from repositories.subject_repo import SubjectRepository
     from services.event_service import EventService
     from services.hash_service import HashService
-    from repositories.subject_repo import SubjectRepository
-    from repositories.event_schema_repo import EventSchemaRepository
 
     # Create 100 mock messages
     messages = [
@@ -202,12 +213,12 @@ async def test_email_sync_batch_deduplication_performance(
             from_address=f"sender{i}@example.com",
             to_addresses=["test@example.com"],
             subject=f"Email {i}",
-            timestamp=datetime(2025, 1, 1, 10, 0, i, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 1, 1, 10, 0, i, tzinfo=UTC),
             labels=["INBOX"],
             is_read=False,
             is_starred=False,
             has_attachments=False,
-            provider_metadata={}
+            provider_metadata={},
         )
         for i in range(100)
     ]
@@ -216,67 +227,73 @@ async def test_email_sync_batch_deduplication_performance(
         event_repo=EventRepository(test_db),
         hash_service=HashService(),
         subject_repo=SubjectRepository(test_db),
-        schema_repo=EventSchemaRepository(test_db)
+        schema_repo=EventSchemaRepository(test_db),
     )
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch('integrations.email.factory.EmailProviderFactory.create_provider') as mock_factory:
+    with patch(
+        "integrations.email.factory.EmailProviderFactory.create_provider"
+    ) as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.fetch_messages = AsyncMock(return_value=messages)
         mock_provider.disconnect = AsyncMock()
         mock_factory.return_value = mock_provider
 
-        with patch('integrations.email.sync.CredentialEncryptor') as mock_encryptor_class:
+        with patch(
+            "integrations.email.sync.CredentialEncryptor"
+        ) as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor
 
             # Spy on _check_existing_events_batch to ensure it's called
-            original_batch_check = sync_service._check_existing_events_batch
-            batch_check_called = False
+            with patch.object(
+                sync_service,
+                "_check_existing_events_batch",
+                wraps=sync_service._check_existing_events_batch,
+            ) as mock_batch_check:
+                # Run sync
+                stats = await sync_service.sync_account(test_email_account)
 
-            async def spy_batch_check(*args, **kwargs):
-                nonlocal batch_check_called
-                batch_check_called = True
-                return await original_batch_check(*args, **kwargs)
-
-            sync_service._check_existing_events_batch = spy_batch_check
-
-            # Run sync
-            stats = await sync_service.sync_account(test_email_account)
-
-            # Verify batch check was used
-            assert batch_check_called, "Batch deduplication method should be called"
-            assert stats['events_created'] == 100
+                # Verify batch check was used
+                assert (
+                    mock_batch_check.called
+                ), "Batch deduplication method should be called"
+                assert stats["events_created"] == 100
 
 
 @pytest.mark.asyncio
 async def test_email_sync_handles_auth_error(test_db, test_email_account):
     """Test that authentication errors are properly handled"""
+    from google.auth.exceptions import RefreshError
+
+    from repositories.event_schema_repo import EventSchemaRepository
+    from repositories.subject_repo import SubjectRepository
     from services.event_service import EventService
     from services.hash_service import HashService
-    from repositories.subject_repo import SubjectRepository
-    from repositories.event_schema_repo import EventSchemaRepository
-    from google.auth.exceptions import RefreshError
 
     event_service = EventService(
         event_repo=EventRepository(test_db),
         hash_service=HashService(),
         subject_repo=SubjectRepository(test_db),
-        schema_repo=EventSchemaRepository(test_db)
+        schema_repo=EventSchemaRepository(test_db),
     )
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch('integrations.email.factory.EmailProviderFactory.create_provider') as mock_factory:
+    with patch(
+        "integrations.email.factory.EmailProviderFactory.create_provider"
+    ) as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock(side_effect=RefreshError("Token expired"))
         mock_provider.disconnect = AsyncMock()
         mock_factory.return_value = mock_provider
 
-        with patch('integrations.email.sync.CredentialEncryptor') as mock_encryptor_class:
+        with patch(
+            "integrations.email.sync.CredentialEncryptor"
+        ) as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "expired_token"}
             mock_encryptor_class.return_value = mock_encryptor
@@ -292,23 +309,27 @@ async def test_email_sync_handles_auth_error(test_db, test_email_account):
 
 
 @pytest.mark.asyncio
-async def test_incremental_vs_full_sync(test_db, test_email_account, mock_email_messages):
+async def test_incremental_vs_full_sync(
+    test_db, test_email_account, mock_email_messages
+):
     """Test difference between incremental and full sync"""
+    from repositories.event_schema_repo import EventSchemaRepository
+    from repositories.subject_repo import SubjectRepository
     from services.event_service import EventService
     from services.hash_service import HashService
-    from repositories.subject_repo import SubjectRepository
-    from repositories.event_schema_repo import EventSchemaRepository
 
     event_service = EventService(
         event_repo=EventRepository(test_db),
         hash_service=HashService(),
         subject_repo=SubjectRepository(test_db),
-        schema_repo=EventSchemaRepository(test_db)
+        schema_repo=EventSchemaRepository(test_db),
     )
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch('integrations.email.factory.EmailProviderFactory.create_provider') as mock_factory:
+    with patch(
+        "integrations.email.factory.EmailProviderFactory.create_provider"
+    ) as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.disconnect = AsyncMock()
@@ -323,7 +344,9 @@ async def test_incremental_vs_full_sync(test_db, test_email_account, mock_email_
         mock_provider.fetch_messages = track_fetch
         mock_factory.return_value = mock_provider
 
-        with patch('integrations.email.sync.CredentialEncryptor') as mock_encryptor_class:
+        with patch(
+            "integrations.email.sync.CredentialEncryptor"
+        ) as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor

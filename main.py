@@ -13,7 +13,7 @@ from api import (
     email_accounts,
     event_schemas,
     events,
-    gmail_oauth,
+    oauth_providers,
     permissions,
     roles,
     subjects,
@@ -107,11 +107,11 @@ async def lifespan(app: FastAPI):
     # Shutdown telemetry (flush remaining spans)
     if settings.telemetry_enabled:
         try:
-            telemetry = get_telemetry()
-            if telemetry:
-                telemetry.shutdown()
-        except:
-            pass
+            telemetry_instance = get_telemetry()
+            if telemetry_instance:
+                telemetry_instance.shutdown()
+        except Exception as e:
+            logger.warning(f"Error during telemetry shutdown: {e}")
 
     # Shutdown cache
     if settings.redis_enabled:
@@ -119,8 +119,8 @@ async def lifespan(app: FastAPI):
             cache = await get_cache_service()
             await cache.disconnect()
             logger.info("Redis cache disconnected")
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error during cache shutdown: {e}")
 
     await engine.dispose()
     logger.info("Database engine disposed")
@@ -161,7 +161,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(auth.router, prefix="/auth", tags=["authentication"])
-app.include_router(gmail_oauth.router)  # Includes /auth/gmail prefix
+app.include_router(oauth_providers.router, prefix="/api", tags=["oauth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
@@ -202,10 +202,12 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     - 200 OK if healthy
     - 503 Service Unavailable if unhealthy
     """
+    from typing import Any
+
     from fastapi.responses import JSONResponse
     from sqlalchemy import text
 
-    checks = {
+    checks: dict[str, Any] = {
         "api": True,  # If we got here, API is responding
         "database": False,
         "cache": None,  # None = not configured, True = healthy, False = unhealthy

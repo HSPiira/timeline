@@ -1,10 +1,12 @@
 """Unit tests for VerificationService"""
-import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
-from services.verification_service import VerificationService, VerificationResult, ChainVerificationResult
-from services.hash_service import HashService
+from unittest.mock import AsyncMock
+
+import pytest
+
 from models.event import Event
+from services.hash_service import HashService
+from services.verification_service import VerificationService
 
 
 @pytest.fixture
@@ -22,10 +24,7 @@ def mock_event_repo():
 @pytest.fixture
 def verification_service(mock_event_repo, hash_service):
     """VerificationService instance"""
-    return VerificationService(
-        event_repo=mock_event_repo,
-        hash_service=hash_service
-    )
+    return VerificationService(event_repo=mock_event_repo, hash_service=hash_service)
 
 
 def create_test_event(
@@ -34,8 +33,8 @@ def create_test_event(
     subject_id: str,
     event_type: str,
     payload: dict,
-    previous_hash: str = None,
-    hash_service: HashService = None
+    previous_hash: str | None = None,
+    hash_service: HashService | None = None,
 ) -> Event:
     """Helper to create test event with valid hash"""
     event_time = datetime.utcnow()
@@ -49,7 +48,7 @@ def create_test_event(
         event_type=event_type,
         event_time=event_time,
         payload=payload,
-        previous_hash=previous_hash
+        previous_hash=previous_hash,
     )
 
     event = Event(
@@ -60,7 +59,7 @@ def create_test_event(
         event_time=event_time,
         payload=payload,
         hash=computed_hash,
-        previous_hash=previous_hash
+        previous_hash=previous_hash,
     )
 
     return event
@@ -70,11 +69,7 @@ class TestVerifySubjectChain:
     """Tests for verify_subject_chain method"""
 
     @pytest.mark.asyncio
-    async def test_empty_chain_valid(
-        self,
-        verification_service,
-        mock_event_repo
-    ):
+    async def test_empty_chain_valid(self, verification_service, mock_event_repo):
         """
         GIVEN no events for subject
         WHEN verifying chain
@@ -85,8 +80,7 @@ class TestVerifySubjectChain:
 
         # WHEN
         result = await verification_service.verify_subject_chain(
-            subject_id="subj_123",
-            tenant_id="tenant_123"
+            subject_id="subj_123", tenant_id="tenant_123"
         )
 
         # THEN
@@ -97,10 +91,7 @@ class TestVerifySubjectChain:
 
     @pytest.mark.asyncio
     async def test_single_genesis_event_valid(
-        self,
-        verification_service,
-        mock_event_repo,
-        hash_service
+        self, verification_service, mock_event_repo, hash_service
     ):
         """
         GIVEN single genesis event
@@ -115,14 +106,13 @@ class TestVerifySubjectChain:
             event_type="created",
             payload={"test": "data"},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
         mock_event_repo.get_by_subject.return_value = [event]
 
         # WHEN
         result = await verification_service.verify_subject_chain(
-            subject_id="subj_123",
-            tenant_id="tenant_123"
+            subject_id="subj_123", tenant_id="tenant_123"
         )
 
         # THEN
@@ -133,10 +123,7 @@ class TestVerifySubjectChain:
 
     @pytest.mark.asyncio
     async def test_multi_event_chain_valid(
-        self,
-        verification_service,
-        mock_event_repo,
-        hash_service
+        self, verification_service, mock_event_repo, hash_service
     ):
         """
         GIVEN chain of 3 valid events
@@ -151,7 +138,7 @@ class TestVerifySubjectChain:
             event_type="created",
             payload={"step": 1},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         event2 = create_test_event(
@@ -161,7 +148,7 @@ class TestVerifySubjectChain:
             event_type="updated",
             payload={"step": 2},
             previous_hash=event1.hash,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         event3 = create_test_event(
@@ -171,15 +158,14 @@ class TestVerifySubjectChain:
             event_type="completed",
             payload={"step": 3},
             previous_hash=event2.hash,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         mock_event_repo.get_by_subject.return_value = [event1, event2, event3]
 
         # WHEN
         result = await verification_service.verify_subject_chain(
-            subject_id="subj_123",
-            tenant_id="tenant_123"
+            subject_id="subj_123", tenant_id="tenant_123"
         )
 
         # THEN
@@ -190,10 +176,7 @@ class TestVerifySubjectChain:
 
     @pytest.mark.asyncio
     async def test_tampered_event_detected(
-        self,
-        verification_service,
-        mock_event_repo,
-        hash_service
+        self, verification_service, mock_event_repo, hash_service
     ):
         """
         GIVEN event with modified payload (hash mismatch)
@@ -208,7 +191,7 @@ class TestVerifySubjectChain:
             event_type="created",
             payload={"amount": 100},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         # Tamper with payload (simulating malicious modification)
@@ -219,8 +202,7 @@ class TestVerifySubjectChain:
 
         # WHEN
         result = await verification_service.verify_subject_chain(
-            subject_id="subj_123",
-            tenant_id="tenant_123"
+            subject_id="subj_123", tenant_id="tenant_123"
         )
 
         # THEN
@@ -232,10 +214,7 @@ class TestVerifySubjectChain:
 
     @pytest.mark.asyncio
     async def test_broken_chain_detected(
-        self,
-        verification_service,
-        mock_event_repo,
-        hash_service
+        self, verification_service, mock_event_repo, hash_service
     ):
         """
         GIVEN events with broken previous_hash link
@@ -250,7 +229,7 @@ class TestVerifySubjectChain:
             event_type="created",
             payload={"step": 1},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         event2 = create_test_event(
@@ -260,15 +239,14 @@ class TestVerifySubjectChain:
             event_type="updated",
             payload={"step": 2},
             previous_hash="wrong_hash",  # Should be event1.hash!
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         mock_event_repo.get_by_subject.return_value = [event1, event2]
 
         # WHEN
         result = await verification_service.verify_subject_chain(
-            subject_id="subj_123",
-            tenant_id="tenant_123"
+            subject_id="subj_123", tenant_id="tenant_123"
         )
 
         # THEN
@@ -284,10 +262,7 @@ class TestVerifyTenantChains:
 
     @pytest.mark.asyncio
     async def test_multiple_subjects_all_valid(
-        self,
-        verification_service,
-        mock_event_repo,
-        hash_service
+        self, verification_service, mock_event_repo, hash_service
     ):
         """
         GIVEN multiple subjects with valid chains
@@ -302,7 +277,7 @@ class TestVerifyTenantChains:
             event_type="created",
             payload={"data": "a1"},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         event_a2 = create_test_event(
@@ -312,7 +287,7 @@ class TestVerifyTenantChains:
             event_type="updated",
             payload={"data": "a2"},
             previous_hash=event_a1.hash,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         # Subject B events
@@ -323,15 +298,14 @@ class TestVerifyTenantChains:
             event_type="created",
             payload={"data": "b1"},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         mock_event_repo.get_by_tenant.return_value = [event_a1, event_a2, event_b1]
 
         # WHEN
         result = await verification_service.verify_tenant_chains(
-            tenant_id="tenant_123",
-            limit=100
+            tenant_id="tenant_123", limit=100
         )
 
         # THEN
@@ -342,10 +316,7 @@ class TestVerifyTenantChains:
 
     @pytest.mark.asyncio
     async def test_one_subject_invalid_detected(
-        self,
-        verification_service,
-        mock_event_repo,
-        hash_service
+        self, verification_service, mock_event_repo, hash_service
     ):
         """
         GIVEN multiple subjects, one with tampered event
@@ -360,7 +331,7 @@ class TestVerifyTenantChains:
             event_type="created",
             payload={"data": "a1"},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
 
         # Tampered subject
@@ -371,7 +342,7 @@ class TestVerifyTenantChains:
             event_type="created",
             payload={"amount": 100},
             previous_hash=None,
-            hash_service=hash_service
+            hash_service=hash_service,
         )
         event_b1.payload = {"amount": 999}  # Tampered!
 
@@ -379,8 +350,7 @@ class TestVerifyTenantChains:
 
         # WHEN
         result = await verification_service.verify_tenant_chains(
-            tenant_id="tenant_123",
-            limit=100
+            tenant_id="tenant_123", limit=100
         )
 
         # THEN

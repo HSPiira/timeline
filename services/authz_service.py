@@ -1,12 +1,12 @@
-from functools import lru_cache
-from typing import Set, Optional
-from sqlalchemy import func, select, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import get_settings
+from core.exceptions import PermissionDeniedError
 from models.permission import Permission, RolePermission, UserRole
 from models.role import Role
-from core.exceptions import PermissionDeniedError
-from core.config import get_settings
+from services.cache_service import CacheService
+
 
 class AuthorizationService:
     """
@@ -17,14 +17,13 @@ class AuthorizationService:
     Cache TTL: 5 minutes (configurable)
     """
 
-    def __init__(self, db: AsyncSession, cache_service: Optional['CacheService'] = None):
+    def __init__(self, db: AsyncSession, cache_service: CacheService | None = None):
         self.db = db
         self.cache = cache_service
         self.settings = get_settings()
         self.cache_ttl = self.settings.cache_ttl_permissions
-        
 
-    async def get_user_permissions(self, user_id: str, tenant_id: str) -> Set[str]:
+    async def get_user_permissions(self, user_id: str, tenant_id: str) -> set[str]:
         """
         Get all permissions for a user (aggregated from all roles)
         Returns: Set of permission codes like {'event:create', 'subject:read'}
@@ -51,7 +50,7 @@ class AuthorizationService:
                 UserRole.tenant_id == tenant_id,
                 Role.is_active.is_(True),
                 # Handle role expiration
-                or_(UserRole.expires_at.is_(None), UserRole.expires_at > func.now())
+                or_(UserRole.expires_at.is_(None), UserRole.expires_at > func.now()),
             )
         )
 
@@ -63,17 +62,13 @@ class AuthorizationService:
             await self.cache.set(cache_key, list(permissions), ttl=self.cache_ttl)
 
         return permissions
-    
+
     async def check_permission(
-            self,
-            user_id: str,
-            tenant_id: str,
-            resource: str,
-            action: str
+        self, user_id: str, tenant_id: str, resource: str, action: str
     ) -> bool:
         """
         Check if user has specific permission.
-        
+
         Examples:
             - check_permission(user_id, tenant_id, "event", "create")
             - check_permission(user_id, tenant_id, "subject", "delete")
@@ -85,23 +80,20 @@ class AuthorizationService:
         permission_code = f"{resource}:{action}"
         if permission_code in permissions:
             return True
-        
+
         # Check wildcard permissions (optional enhancement)
-        wildcard_resource = f"{resource}:*" # "event:*" grants all event actions
+        wildcard_resource = f"{resource}:*"  # "event:*" grants all event actions
         wildcard_all = "*:*"  # Super admin wildcard
 
         return wildcard_resource in permissions or wildcard_all in permissions
-    
 
     async def require_permission(
-        self,
-        user_id: str,
-        tenant_id: str,
-        resource: str,
-        action: str
+        self, user_id: str, tenant_id: str, resource: str, action: str
     ) -> None:
         """Raise exception if user lacks permission"""
-        has_permission = await self.check_permission(user_id, tenant_id, resource, action)
+        has_permission = await self.check_permission(
+            user_id, tenant_id, resource, action
+        )
 
         if not has_permission:
             raise PermissionDeniedError(

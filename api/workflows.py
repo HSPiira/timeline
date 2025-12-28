@@ -1,25 +1,26 @@
 """Workflow API endpoints"""
-from typing import Annotated, List
-from fastapi import APIRouter, Depends, status, HTTPException, Query
-from models.tenant import Tenant
-from models.workflow import Workflow
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from api.deps import (
     get_current_tenant,
     get_current_user,
-    require_permission,
+    get_db,
     get_db_transactional,
-    get_db
+    require_permission,
 )
+from models.tenant import Tenant
+from models.workflow import Workflow
+from repositories.workflow_repo import WorkflowExecutionRepository, WorkflowRepository
 from schemas.token import TokenPayload
 from schemas.workflow import (
     WorkflowCreate,
-    WorkflowUpdate,
+    WorkflowExecutionResponse,
     WorkflowResponse,
-    WorkflowExecutionResponse
+    WorkflowUpdate,
 )
-from repositories.workflow_repo import WorkflowRepository, WorkflowExecutionRepository
-from sqlalchemy.ext.asyncio import AsyncSession
-
 
 router = APIRouter()
 
@@ -28,13 +29,13 @@ router = APIRouter()
     "/",
     response_model=WorkflowResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("workflow", "create"))]
+    dependencies=[Depends(require_permission("workflow", "create"))],
 )
 async def create_workflow(
     data: WorkflowCreate,
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
-    current_user: Annotated[TokenPayload, Depends(get_current_user)]
+    current_user: Annotated[TokenPayload, Depends(get_current_user)],
 ):
     """
     Create new workflow.
@@ -54,7 +55,7 @@ async def create_workflow(
         execution_order=data.execution_order,
         max_executions_per_day=data.max_executions_per_day,
         is_active=data.is_active,
-        created_by=current_user.sub
+        created_by=current_user.sub,
     )
 
     created = await repo.create(workflow)
@@ -63,23 +64,20 @@ async def create_workflow(
 
 @router.get(
     "/",
-    response_model=List[WorkflowResponse],
-    dependencies=[Depends(require_permission("workflow", "read"))]
+    response_model=list[WorkflowResponse],
+    dependencies=[Depends(require_permission("workflow", "read"))],
 )
 async def list_workflows(
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    include_inactive: bool = Query(False)
+    include_inactive: bool = Query(False),
 ):
     """List all workflows for tenant"""
     repo = WorkflowRepository(db)
     workflows = await repo.get_by_tenant(
-        tenant_id=tenant.id,
-        skip=skip,
-        limit=limit,
-        include_inactive=include_inactive
+        tenant_id=tenant.id, skip=skip, limit=limit, include_inactive=include_inactive
     )
     return [WorkflowResponse.model_validate(w) for w in workflows]
 
@@ -87,12 +85,12 @@ async def list_workflows(
 @router.get(
     "/{workflow_id}",
     response_model=WorkflowResponse,
-    dependencies=[Depends(require_permission("workflow", "read"))]
+    dependencies=[Depends(require_permission("workflow", "read"))],
 )
 async def get_workflow(
     workflow_id: str,
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Get workflow by ID"""
     repo = WorkflowRepository(db)
@@ -100,8 +98,7 @@ async def get_workflow(
 
     if not workflow:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workflow not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
         )
 
     return WorkflowResponse.model_validate(workflow)
@@ -110,13 +107,13 @@ async def get_workflow(
 @router.put(
     "/{workflow_id}",
     response_model=WorkflowResponse,
-    dependencies=[Depends(require_permission("workflow", "update"))]
+    dependencies=[Depends(require_permission("workflow", "update"))],
 )
 async def update_workflow(
     workflow_id: str,
     data: WorkflowUpdate,
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    db: Annotated[AsyncSession, Depends(get_db_transactional)]
+    db: Annotated[AsyncSession, Depends(get_db_transactional)],
 ):
     """Update workflow"""
     repo = WorkflowRepository(db)
@@ -124,13 +121,12 @@ async def update_workflow(
 
     if not workflow:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workflow not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
         )
 
     # Update fields
-    update_data = data.model_dump(exclude_unset=True)  
-    for field, value in update_data.items():  
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
         setattr(workflow, field, value)
 
     updated = await repo.update(workflow)
@@ -140,12 +136,12 @@ async def update_workflow(
 @router.delete(
     "/{workflow_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permission("workflow", "delete"))]
+    dependencies=[Depends(require_permission("workflow", "delete"))],
 )
 async def delete_workflow(
     workflow_id: str,
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    db: Annotated[AsyncSession, Depends(get_db_transactional)]
+    db: Annotated[AsyncSession, Depends(get_db_transactional)],
 ):
     """Soft delete workflow"""
     repo = WorkflowRepository(db)
@@ -153,22 +149,21 @@ async def delete_workflow(
 
     if not deleted:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workflow not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
         )
 
 
 @router.get(
     "/{workflow_id}/executions",
-    response_model=List[WorkflowExecutionResponse],
-    dependencies=[Depends(require_permission("workflow", "read"))]
+    response_model=list[WorkflowExecutionResponse],
+    dependencies=[Depends(require_permission("workflow", "read"))],
 )
 async def get_workflow_executions(
     workflow_id: str,
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000)
+    limit: int = Query(100, ge=1, le=1000),
 ):
     """Get execution history for workflow"""
     # Verify workflow exists and belongs to tenant
@@ -177,17 +172,13 @@ async def get_workflow_executions(
 
     if not workflow:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workflow not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
         )
 
     # Get executions
     exec_repo = WorkflowExecutionRepository(db)
     executions = await exec_repo.get_by_workflow(
-        workflow_id=workflow_id,
-        tenant_id=tenant.id,
-        skip=skip,
-        limit=limit
+        workflow_id=workflow_id, tenant_id=tenant.id, skip=skip, limit=limit
     )
 
     return [WorkflowExecutionResponse.model_validate(e) for e in executions]
@@ -196,12 +187,12 @@ async def get_workflow_executions(
 @router.get(
     "/executions/{execution_id}",
     response_model=WorkflowExecutionResponse,
-    dependencies=[Depends(require_permission("workflow", "read"))]
+    dependencies=[Depends(require_permission("workflow", "read"))],
 )
 async def get_execution(
     execution_id: str,
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Get workflow execution details"""
     repo = WorkflowExecutionRepository(db)
@@ -209,8 +200,7 @@ async def get_execution(
 
     if not execution:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Execution not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
         )
 
     return WorkflowExecutionResponse.model_validate(execution)

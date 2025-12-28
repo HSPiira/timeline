@@ -1,9 +1,11 @@
 """Credential encryption utilities"""
-import json
 import base64
+import json
+
 from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 from core.config import get_settings
 
 settings = get_settings()
@@ -57,21 +59,26 @@ class CredentialEncryptor:
         encrypted_bytes = self._fernet.encrypt(json_str.encode())
         return encrypted_bytes.decode()
 
-    def decrypt(self, encrypted_str: str) -> dict:  
-        """  
-        Decrypt credentials string to dictionary.  
+    def decrypt(self, encrypted_str: str) -> dict:
+        """
+        Decrypt credentials string to dictionary.
 
-        Args:  
-            encrypted_str: Encrypted credentials from database  
+        Args:
+            encrypted_str: Encrypted credentials from database
 
-        Returns:  
-            Decrypted credentials dictionary  
-        """  
-        try:  
-            decrypted_bytes = self._fernet.decrypt(encrypted_str.encode())  
-            json_str = decrypted_bytes.decode()  
-            return json.loads(json_str)  
-        except InvalidToken as e:  
-            raise ValueError("Failed to decrypt credentials - invalid or corrupted data") from e  
-        except json.JSONDecodeError as e:  
-            raise ValueError("Decrypted credentials are not valid JSON") from e  
+        Returns:
+            Decrypted credentials dictionary
+        """
+        try:
+            decrypted_bytes = self._fernet.decrypt(encrypted_str.encode())
+            json_str = decrypted_bytes.decode()
+            result = json.loads(json_str)
+            if not isinstance(result, dict):
+                raise ValueError("Decrypted credentials must be a dictionary")
+            return result
+        except InvalidToken as e:
+            raise ValueError(
+                "Failed to decrypt credentials - invalid or corrupted data"
+            ) from e
+        except json.JSONDecodeError as e:
+            raise ValueError("Decrypted credentials are not valid JSON") from e

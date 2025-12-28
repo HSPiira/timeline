@@ -1,11 +1,13 @@
 """Gmail provider implementation using Gmail API"""
-from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
+
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from integrations.email.protocols import IEmailProvider, EmailMessage, EmailProviderConfig
 from core.logging import get_logger
+from integrations.email.protocols import EmailMessage, EmailProviderConfig
 
 logger = get_logger(__name__)
 
@@ -21,11 +23,11 @@ class GmailProvider:
 
     def __init__(self) -> None:
         self._service = None
-        self._config: Optional[EmailProviderConfig] = None
-        self._credentials: Optional[Credentials] = None
-        self._token_refresh_callback: Optional[Callable] = None
+        self._config: EmailProviderConfig | None = None
+        self._credentials: Credentials | None = None
+        self._token_refresh_callback: Callable[[dict], None] | None = None
 
-    def set_token_refresh_callback(self, callback: Callable[[Dict], None]):
+    def set_token_refresh_callback(self, callback: Callable[[dict], None]):
         """
         Set callback to be called when tokens are refreshed.
 
@@ -39,7 +41,7 @@ class GmailProvider:
         self._config = config
 
         # Validate required credentials
-        required_keys = ['access_token', 'refresh_token', 'client_id', 'client_secret']
+        required_keys = ["access_token", "refresh_token", "client_id", "client_secret"]
         missing = [k for k in required_keys if not config.credentials.get(k)]
         if missing:
             raise ValueError(f"Missing required Gmail OAuth credentials: {missing}")
@@ -47,23 +49,29 @@ class GmailProvider:
         # Build credentials from OAuth tokens
         # Include scopes and enable automatic token refresh
         self._credentials = Credentials(
-            token=config.credentials.get('access_token'),
-            refresh_token=config.credentials.get('refresh_token'),
-            token_uri='https://oauth2.googleapis.com/token',
-            client_id=config.credentials['client_id'],
-            client_secret=config.credentials['client_secret'],
-            scopes=['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.modify']
+            token=config.credentials.get("access_token"),
+            refresh_token=config.credentials.get("refresh_token"),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=config.credentials["client_id"],
+            client_secret=config.credentials["client_secret"],
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/gmail.modify",
+            ],
         )
 
         try:
             # Build Gmail service
             # The service will automatically refresh tokens when they expire
-            self._service = build('gmail', 'v2', credentials=self._credentials)
+            self._service = build("gmail", "v2", credentials=self._credentials)
 
             # Proactively check and refresh tokens if needed
             if self._credentials.expired:
-                logger.info(f"Access token expired for {config.email_address}, refreshing...")
+                logger.info(
+                    f"Access token expired for {config.email_address}, refreshing..."
+                )
                 from google.auth.transport.requests import Request
+
                 self._credentials.refresh(Request())
                 await self._check_and_refresh_tokens()
 
@@ -81,17 +89,19 @@ class GmailProvider:
         if not self._credentials or not self._token_refresh_callback:
             return
 
+        assert self._config is not None, "Config must be set when credentials exist"
+
         # Check if token was refreshed
         current_token = self._credentials.token
-        original_token = self._config.credentials.get('access_token')
+        original_token = self._config.credentials.get("access_token")
 
         if current_token != original_token:
             # Token was refreshed, notify callback
             updated_credentials = {
-                'access_token': self._credentials.token,
-                'refresh_token': self._credentials.refresh_token,
-                'client_id': self._config.credentials.get('client_id'),
-                'client_secret': self._config.credentials.get('client_secret'),
+                "access_token": self._credentials.token,
+                "refresh_token": self._credentials.refresh_token,
+                "client_id": self._config.credentials.get("client_id"),
+                "client_secret": self._config.credentials.get("client_secret"),
             }
 
             logger.info(f"Tokens refreshed for {self._config.email_address}")
@@ -106,31 +116,30 @@ class GmailProvider:
         logger.info("Disconnected from Gmail API")
 
     async def fetch_messages(
-        self,
-        since: Optional[datetime] = None,
-        limit: int = 100
-    ) -> List[EmailMessage]:
+        self, since: datetime | None = None, limit: int = 100
+    ) -> list[EmailMessage]:
         """Fetch messages from Gmail"""
         if not self._service:
             raise RuntimeError("Not connected to Gmail API")
 
         # Build query
-        query = ''
+        query = ""
         if since:
             timestamp = int(since.timestamp())
-            query = f'after:{timestamp}'
+            query = f"after:{timestamp}"
 
         # List messages (this may trigger token refresh)
-        results = self._service.users().messages().list(
-            userId='me',
-            q=query,
-            maxResults=limit
-        ).execute()
+        results = (
+            self._service.users()
+            .messages()
+            .list(userId="me", q=query, maxResults=limit)
+            .execute()
+        )
 
         # Check if tokens were refreshed during the API call
         await self._check_and_refresh_tokens()
 
-        message_ids = [msg['id'] for msg in results.get('messages', [])]
+        message_ids = [msg["id"] for msg in results.get("messages", [])]
 
         # Fetch full message details
         messages = []
@@ -146,46 +155,48 @@ class GmailProvider:
         logger.info(f"Fetched {len(messages)} messages from Gmail")
         return messages
 
-    async def _fetch_and_parse_message(self, msg_id: str) -> Optional[EmailMessage]:
+    async def _fetch_and_parse_message(self, msg_id: str) -> EmailMessage | None:
         """Fetch and parse a single Gmail message"""
-        msg = self._service.users().messages().get(
-            userId='me',
-            id=msg_id,
-            format='full'
-        ).execute()
+        assert self._service is not None, "Service must be connected"
+
+        msg = (
+            self._service.users()
+            .messages()
+            .get(userId="me", id=msg_id, format="full")
+            .execute()
+        )
 
         # Extract headers
-        headers = {h['name']: h['value'] for h in msg['payload']['headers']}
+        headers = {h["name"]: h["value"] for h in msg["payload"]["headers"]}
 
         # Parse timestamp (Gmail internalDate is milliseconds since epoch)
         # Make timezone-aware using UTC
-        timestamp = datetime.fromtimestamp(int(msg['internalDate']) / 1000, tz=timezone.utc)
+        timestamp = datetime.fromtimestamp(int(msg["internalDate"]) / 1000, tz=UTC)
 
         # Extract labels
-        label_ids = msg.get('labelIds', [])
+        label_ids = msg.get("labelIds", [])
 
         return EmailMessage(
-            message_id=headers.get('Message-ID', msg_id),
-            thread_id=msg.get('threadId'),
-            from_address=headers.get('From', ''),
-            to_addresses=[addr.strip() for addr in headers.get('To', '').split(',')],
-            subject=headers.get('Subject', ''),
+            message_id=headers.get("Message-ID", msg_id),
+            thread_id=msg.get("threadId"),
+            from_address=headers.get("From", ""),
+            to_addresses=[addr.strip() for addr in headers.get("To", "").split(",")],
+            subject=headers.get("Subject", ""),
             timestamp=timestamp,
             labels=label_ids,
-            is_read='UNREAD' not in label_ids,
-            is_starred='STARRED' in label_ids,
+            is_read="UNREAD" not in label_ids,
+            is_starred="STARRED" in label_ids,
             has_attachments=any(
-                part.get('filename')
-                for part in msg['payload'].get('parts', [])
+                part.get("filename") for part in msg["payload"].get("parts", [])
             ),
             provider_metadata={
-                'gmail_id': msg_id,
-                'thread_id': msg.get('threadId'),
-                'label_ids': label_ids
-            }
+                "gmail_id": msg_id,
+                "thread_id": msg.get("threadId"),
+                "label_ids": label_ids,
+            },
         )
 
-    async def setup_webhook(self, callback_url: str) -> Dict[str, Any]:
+    async def setup_webhook(self, callback_url: str) -> dict[str, Any]:
         """
         Setup Gmail push notifications using Google Cloud Pub/Sub.
 
@@ -215,7 +226,7 @@ class GmailProvider:
             raise RuntimeError("Not connected to Gmail API")
 
         # Validate that callback_url is a Pub/Sub topic, not HTTP URL
-        if callback_url.startswith(('http://', 'https://')):
+        if callback_url.startswith(("http://", "https://")):
             raise ValueError(
                 f"Gmail webhooks require a Google Cloud Pub/Sub topic name, not an HTTP URL. "
                 f"Expected format: 'projects/{{project-id}}/topics/{{topic-name}}', "
@@ -224,23 +235,17 @@ class GmailProvider:
             )
 
         # Validate Pub/Sub topic format
-        if not callback_url.startswith('projects/') or '/topics/' not in callback_url:
+        if not callback_url.startswith("projects/") or "/topics/" not in callback_url:
             raise ValueError(
                 f"Invalid Pub/Sub topic format: '{callback_url}'. "
                 f"Expected: 'projects/{{project-id}}/topics/{{topic-name}}'"
             )
 
         # Setup watch on mailbox
-        request = {
-            'labelIds': ['INBOX'],
-            'topicName': callback_url
-        }
+        request = {"labelIds": ["INBOX"], "topicName": callback_url}
 
         try:
-            response = self._service.users().watch(
-                userId='me',
-                body=request
-            ).execute()
+            response = self._service.users().watch(userId="me", body=request).execute()
 
             logger.info(f"Gmail webhook setup successful: {response}")
             return response
@@ -256,7 +261,7 @@ class GmailProvider:
         if not self._service:
             return
 
-        self._service.users().stop(userId='me').execute()
+        self._service.users().stop(userId="me").execute()
         logger.info("Gmail webhook removed")
 
     @property

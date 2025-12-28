@@ -82,5 +82,12 @@ async def create_test_token(tenant_id: str, user_id: str = "test_user"):
     Development-only endpoint to generate test tokens.
     Remove or disable in production.
     """
+    # Runtime guard: Block access in production environments
+    if not settings.debug:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Endpoint not found",
+        )
+
     access_token = create_access_token(data={"sub": user_id, "tenant_id": tenant_id})
     return Token(access_token=access_token, token_type="bearer")

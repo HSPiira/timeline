@@ -12,9 +12,9 @@ class WorkflowCreate(BaseModel):
     description: str | None = None
     trigger_event_type: str = Field(..., pattern=r"^[a-z0-9_]+$")
     trigger_conditions: dict[str, Any] | None = None
-    actions: list[dict[str, Any]] = Field(..., min_items=1)
+    actions: list[dict[str, Any]] = Field(min_length=1)
     execution_order: int = Field(default=0, ge=0)
-    max_executions_per_day: int | None = Field(None, gt=0)
+    max_executions_per_day: int | None = Field(default=None, gt=0)
     is_active: bool = True
 
 
@@ -24,9 +24,9 @@ class WorkflowUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = None
     trigger_conditions: dict[str, Any] | None = None
-    actions: list[dict[str, Any]] | None = Field(None, min_items=1)
-    execution_order: int | None = Field(None, ge=0)
-    max_executions_per_day: int | None = Field(None, gt=0)
+    actions: list[dict[str, Any]] | None = Field(default=None, min_length=1)
+    execution_order: int | None = Field(default=None, ge=0)
+    max_executions_per_day: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
 
 

@@ -1,13 +1,12 @@
 """Document service for coordinating storage and database operations."""
 import hashlib
-from typing import Optional, BinaryIO
-from datetime import datetime
+from typing import BinaryIO
 
-from core.storage_protocols import IStorageService
 from core.exceptions import StorageException
+from core.storage_protocols import IStorageService
+from models.document import Document
 from repositories.document_repo import DocumentRepository
 from repositories.tenant_repo import TenantRepository
-from models.document import Document
 from utils.generators import generate_cuid
 
 
@@ -27,18 +26,14 @@ class DocumentService:
         self,
         storage_service: IStorageService,
         document_repo: DocumentRepository,
-        tenant_repo: TenantRepository
+        tenant_repo: TenantRepository,
     ) -> None:
         self.storage = storage_service
         self.document_repo = document_repo
         self.tenant_repo = tenant_repo
 
     def _generate_storage_ref(
-        self,
-        tenant_code: str,
-        document_id: str,
-        version: int,
-        filename: str
+        self, tenant_code: str, document_id: str, version: int, filename: str
     ) -> str:
         """
         Generate storage reference path.
@@ -86,9 +81,9 @@ class DocumentService:
         original_filename: str,
         mime_type: str,
         document_type: str,
-        event_id: Optional[str] = None,
-        created_by: Optional[str] = None,
-        parent_document_id: Optional[str] = None
+        event_id: str | None = None,
+        created_by: str | None = None,
+        parent_document_id: str | None = None,
     ) -> Document:
         """
         Upload document file and create database record.
@@ -157,10 +152,7 @@ class DocumentService:
         # Generate document ID and storage_ref
         document_id = generate_cuid()
         storage_ref = self._generate_storage_ref(
-            tenant.code,
-            document_id,
-            version,
-            filename
+            tenant.code, document_id, version, filename
         )
 
         # Get file size
@@ -170,7 +162,7 @@ class DocumentService:
 
         # Upload to storage
         try:
-            upload_result = await self.storage.upload(
+            await self.storage.upload(
                 file_data=file_data,
                 storage_ref=storage_ref,
                 expected_checksum=checksum,
@@ -178,8 +170,8 @@ class DocumentService:
                 metadata={
                     "document_id": document_id,
                     "tenant_id": tenant_id,
-                    "subject_id": subject_id
-                }
+                    "subject_id": subject_id,
+                },
             )
         except StorageException as e:
             raise ValueError(f"Storage upload failed: {str(e)}") from e
@@ -200,7 +192,7 @@ class DocumentService:
             version=version,
             is_latest_version=True,
             parent_document_id=parent_document_id,
-            created_by=created_by
+            created_by=created_by,
         )
 
         return await self.document_repo.create(document)

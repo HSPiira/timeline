@@ -1,18 +1,22 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jsonschema
-from typing import Optional, List, TYPE_CHECKING
+
+from core.logging import get_logger
 from core.protocols import (
     IEventRepository,
+    IEventSchemaRepository,
     IHashService,
     ISubjectRepository,
-    IEventSchemaRepository
 )
-from core.logging import get_logger
-from schemas.event import EventCreate
 from models.event import Event
+from schemas.event import EventCreate
 
 if TYPE_CHECKING:
-    from services.workflow_engine import WorkflowEngine
     from models.workflow import WorkflowExecution
+    from services.workflow_engine import WorkflowEngine
 
 logger = get_logger(__name__)
 
@@ -25,8 +29,8 @@ class EventService:
         event_repo: IEventRepository,
         hash_service: IHashService,
         subject_repo: ISubjectRepository,
-        schema_repo: Optional[IEventSchemaRepository] = None,
-        workflow_engine: Optional["WorkflowEngine"] = None
+        schema_repo: IEventSchemaRepository | None = None,
+        workflow_engine: WorkflowEngine | None = None,
     ) -> None:
         self.event_repo = event_repo
         self.hash_service = hash_service
@@ -35,11 +39,7 @@ class EventService:
         self.workflow_engine = workflow_engine
 
     async def create_event(
-        self,
-        tenant_id: str,
-        event: EventCreate,
-        *,
-        trigger_workflows: bool = True
+        self, tenant_id: str, event: EventCreate, *, trigger_workflows: bool = True
     ) -> Event:
         """
         Create a new event with cryptographic chaining and schema validation.
@@ -68,16 +68,11 @@ class EventService:
         # 2. Validate schema_version exists and validate payload against it
         if self.schema_repo:
             await self._validate_payload(
-                tenant_id,
-                event.event_type,
-                event.schema_version,
-                event.payload
+                tenant_id, event.event_type, event.schema_version, event.payload
             )
 
         # 3. Get the previous event for this subject (for chaining and validation)
-        prev_event = await self.event_repo.get_last_event(
-            event.subject_id, tenant_id
-        )
+        prev_event = await self.event_repo.get_last_event(event.subject_id, tenant_id)
         prev_hash = prev_event.hash if prev_event else None
 
         # 4. Validate temporal ordering (prevent tampering)
@@ -109,10 +104,8 @@ class EventService:
         return created_event
 
     async def _trigger_workflows(
-        self,
-        event: Event,
-        tenant_id: str
-    ) -> List["WorkflowExecution"]:
+        self, event: Event, tenant_id: str
+    ) -> list[WorkflowExecution]:
         """
         Trigger workflows for created event.
 
@@ -127,26 +120,27 @@ class EventService:
             return []
 
         try:
-            executions = await self.workflow_engine.process_event_triggers(event, tenant_id)
+            executions = await self.workflow_engine.process_event_triggers(
+                event, tenant_id
+            )
             if executions:
                 logger.info(
                     "Triggered %d workflow(s) for event %s (type: %s)",
-                    len(executions), event.id, event.event_type
+                    len(executions),
+                    event.id,
+                    event.event_type,
                 )
             return executions
         except Exception:
             logger.exception(
                 "Workflow trigger failed for event %s (type: %s)",
-                event.id, event.event_type
+                event.id,
+                event.event_type,
             )
             return []
 
     async def _validate_payload(
-        self,
-        tenant_id: str,
-        event_type: str,
-        schema_version: int,
-        payload: dict
+        self, tenant_id: str, event_type: str, schema_version: int, payload: dict
     ) -> None:
         """
         Validate event payload against specific schema version.
@@ -154,8 +148,13 @@ class EventService:
         Raises:
             ValueError: If schema version doesn't exist, is inactive, or validation fails
         """
+        if not self.schema_repo:
+            raise ValueError("Schema repository not configured")
+
         # Get the specific schema version
-        schema = await self.schema_repo.get_by_version(tenant_id, event_type, schema_version)
+        schema = await self.schema_repo.get_by_version(
+            tenant_id, event_type, schema_version
+        )
 
         if not schema:
             raise ValueError(

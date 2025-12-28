@@ -525,7 +525,7 @@ docs/build/
 # Uploaded files (documents should be in S3, not git)
 uploads/
 media/
-storage/
+/storage/
 documents/
 
 # Large files

@@ -1,20 +1,28 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, status, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.params import Query
+
+from api.deps import (
+    get_current_tenant,
+    get_event_repo,
+    get_event_service_transactional,
+    require_permission,
+)
 from models.tenant import Tenant
-from api.deps import get_current_tenant, get_event_service_transactional, get_event_repo, require_permission
+from repositories.event_repo import EventRepository
 from schemas.event import EventCreate, EventResponse
 from schemas.verification import ChainVerificationResponse, EventVerificationResult
 from services.event_service import EventService
-from services.verification_service import VerificationService, ChainVerificationResult
 from services.hash_service import HashService
-from repositories.event_repo import EventRepository
-
+from services.verification_service import ChainVerificationResult, VerificationService
 
 router = APIRouter()
 
 
-def _to_verification_response(result: "ChainVerificationResult") -> ChainVerificationResponse:
+def _to_verification_response(
+    result: "ChainVerificationResult",
+) -> ChainVerificationResponse:
     """Convert service result to API response schema."""
     return ChainVerificationResponse(
         subject_id=result.subject_id,
@@ -34,10 +42,10 @@ def _to_verification_response(result: "ChainVerificationResult") -> ChainVerific
                 error_type=er.error_type,
                 error_message=er.error_message,
                 expected_hash=er.expected_hash,
-                actual_hash=er.actual_hash
+                actual_hash=er.actual_hash,
             )
             for er in result.event_results
-        ]
+        ],
     )
 
 
@@ -45,7 +53,7 @@ def _to_verification_response(result: "ChainVerificationResult") -> ChainVerific
 async def create_event(
     event: EventCreate,
     service: Annotated[EventService, Depends(get_event_service_transactional)],
-    tenant: Tenant = Depends(get_current_tenant)
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> EventResponse:
     """Create a new event with cryptographic chaining"""
     return await service.create_event(tenant.id, event)
@@ -56,8 +64,10 @@ async def get_subject_timeline(
     subject_id: str,
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Max records to return")
+    skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Max records to return")
+    ] = 100,
 ):
     """Get all events for a subject (timeline)"""
     events = await repo.get_by_subject(subject_id, tenant.id, skip, limit)
@@ -68,7 +78,7 @@ async def get_subject_timeline(
 async def get_event(
     event_id: str,
     repo: Annotated[EventRepository, Depends(get_event_repo)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     """Get a single event by ID"""
     event = await repo.get_by_id_and_tenant(event_id, tenant.id)
@@ -81,14 +91,17 @@ async def get_event(
 async def list_events(
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
-    *,
-    event_type: str | None = Query(
-        None,
-        pattern=r'^[a-z0-9_]+$',
-        description="Event type filter (alphanumeric and underscores only)"
-    )
+    skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Max records to return")
+    ] = 100,
+    event_type: Annotated[
+        str | None,
+        Query(
+            pattern=r"^[a-z0-9_]+$",
+            description="Event type filter (alphanumeric and underscores only)",
+        ),
+    ] = None,
 ):
     """List all events for the tenant, optionally filtered by event_type"""
     if event_type:
@@ -100,12 +113,14 @@ async def list_events(
 @router.get(
     "/verify/tenant/all",
     response_model=ChainVerificationResponse,
-    dependencies=[Depends(require_permission("event", "read"))]
+    dependencies=[Depends(require_permission("event", "read"))],
 )
 async def verify_tenant_chains(
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    limit: int = Query(1000, ge=1, le=10000, description="Max events to verify")
+    limit: Annotated[
+        int, Query(ge=1, le=10000, description="Max events to verify")
+    ] = 1000,
 ):
     """
     Verify cryptographic integrity of all event chains for current tenant.
@@ -116,8 +131,7 @@ async def verify_tenant_chains(
     Returns aggregated verification report.
     """
     verification_service = VerificationService(
-        event_repo=repo,
-        hash_service=HashService()
+        event_repo=repo, hash_service=HashService()
     )
 
     result = await verification_service.verify_tenant_chains(tenant.id, limit=limit)
@@ -127,12 +141,12 @@ async def verify_tenant_chains(
 @router.get(
     "/verify/{subject_id}",
     response_model=ChainVerificationResponse,
-    dependencies=[Depends(require_permission("event", "read"))]
+    dependencies=[Depends(require_permission("event", "read"))],
 )
 async def verify_subject_chain(
     subject_id: str,
     repo: Annotated[EventRepository, Depends(get_event_repo)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     """
     Verify cryptographic integrity of event chain for a subject.
@@ -145,8 +159,7 @@ async def verify_subject_chain(
     Returns detailed verification report with per-event status.
     """
     verification_service = VerificationService(
-        event_repo=repo,
-        hash_service=HashService()
+        event_repo=repo, hash_service=HashService()
     )
 
     result = await verification_service.verify_subject_chain(subject_id, tenant.id)

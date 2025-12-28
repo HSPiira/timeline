@@ -1,14 +1,9 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
-from domain.value_objects import (
-    TenantId,
-    SubjectId,
-    EventType,
-    Hash,
-    EventChain
-)
+
 from core.enums import TenantStatus
+from domain.value_objects import EventChain, EventType, SubjectId, TenantId
 
 
 @dataclass
@@ -19,6 +14,7 @@ class EventEntity:
     This represents the business concept of an event, independent of
     how it's stored in the database.
     """
+
     id: str
     tenant_id: TenantId
     subject_id: SubjectId
@@ -31,8 +27,8 @@ class EventEntity:
     def validate(self) -> bool:
         """Validate event business rules"""
         # Event time should not be in the future
-        from datetime import timezone
-        now = datetime.now(timezone.utc) if self.event_time.tzinfo else timezone.utc()
+
+        now = datetime.now(UTC) if self.event_time.tzinfo else datetime.now()
         if self.event_time > now:
             raise ValueError("Event time cannot be in the future")
 
@@ -55,6 +51,7 @@ class TenantEntity:
     """
     Domain entity for Tenant (SRP - business logic separate from persistence)
     """
+
     id: TenantId
     code: str
     name: str

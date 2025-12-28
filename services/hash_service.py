@@ -2,7 +2,6 @@ import hashlib
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional
 
 
 class HashAlgorithm(ABC):
@@ -34,13 +33,13 @@ class HashService:
     New hash algorithms can be added without modifying this class.
     """
 
-    def __init__(self, algorithm: Optional[HashAlgorithm] = None):
+    def __init__(self, algorithm: HashAlgorithm | None = None):
         self.algorithm = algorithm or SHA256Algorithm()
 
     @staticmethod
     def canonical_json(data: dict) -> str:
         """Convert a dictionary to a canonical JSON string"""
-        return json.dumps(data, sort_keys=True, separators=(',', ':'))
+        return json.dumps(data, sort_keys=True, separators=(",", ":"))
 
     def compute_hash(
         self,
@@ -49,15 +48,17 @@ class HashService:
         event_type: str,
         event_time: datetime,
         payload: dict,
-        previous_hash: Optional[str]
+        previous_hash: str | None,
     ) -> str:
         """Compute hash for event data using configured algorithm"""
-        base = "|".join([
-            tenant_id,
-            subject_id,
-            event_type,
-            event_time.isoformat(),
-            self.canonical_json(payload),
-            previous_hash or "GENESIS"
-        ])
+        base = "|".join(
+            [
+                tenant_id,
+                subject_id,
+                event_type,
+                event_time.isoformat(),
+                self.canonical_json(payload),
+                previous_hash or "GENESIS",
+            ]
+        )
         return self.algorithm.hash(base)

@@ -1,20 +1,21 @@
 """Pydantic schemas for chain verification responses"""
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class EventVerificationResult(BaseModel):
     """Single event verification result"""
+
     event_id: str
     event_type: str
     event_time: datetime
     sequence: int
     is_valid: bool
-    error_type: Optional[str] = None
-    error_message: Optional[str] = None
-    expected_hash: Optional[str] = None
-    actual_hash: Optional[str] = None
+    error_type: str | None = None
+    error_message: str | None = None
+    expected_hash: str | None = None
+    actual_hash: str | None = None
 
     class Config:
         from_attributes = True
@@ -22,7 +23,10 @@ class EventVerificationResult(BaseModel):
 
 class ChainVerificationResponse(BaseModel):
     """Chain verification response for subject or tenant"""
-    subject_id: Optional[str] = Field(None, description="Subject ID (null for tenant-wide)")
+
+    subject_id: str | None = Field(
+        None, description="Subject ID (null for tenant-wide)"
+    )
     tenant_id: str
     total_events: int
     valid_events: int

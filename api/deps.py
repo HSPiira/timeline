@@ -22,7 +22,7 @@ security = HTTPBearer()
 
 # Global service instances (singletons)
 _storage_service = None
-_cache_service: CacheService = None
+_cache_service: CacheService | None = None
 
 
 # Cache service dependencies (defined early for use in other dependencies)
@@ -63,13 +63,13 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid authentication credentials: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-    except Exception:
+        ) from e
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from e
 
 
 async def get_current_tenant(
@@ -92,7 +92,7 @@ async def get_current_tenant(
 
 
 def _build_event_service(
-    db: AsyncSession, cache_service: CacheService = None
+    db: AsyncSession, cache_service: CacheService | None = None
 ) -> EventService:
     """Internal helper to construct EventService with all dependencies"""
     from services.workflow_engine import WorkflowEngine

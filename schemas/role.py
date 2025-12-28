@@ -15,7 +15,7 @@ class RoleBase(BaseModel):
 class RoleCreate(RoleBase):
     """Schema for creating a role"""
 
-    permission_codes: list[str] | None = Field(
+    permission_codes: list[str] = Field(
         default_factory=list,
         description="List of permission codes to assign to this role",
     )

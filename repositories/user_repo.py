@@ -1,10 +1,11 @@
 import asyncio
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+
+from core.auth import get_password_hash, verify_password
 from models.user import User
 from repositories.base import BaseRepository
-from core.auth import get_password_hash, verify_password
 
 
 class UserRepository(BaseRepository[User]):
@@ -15,29 +16,30 @@ class UserRepository(BaseRepository[User]):
 
     async def get_by_username_and_tenant(
         self, username: str, tenant_id: str
-    ) -> Optional[User]:
+    ) -> User | None:
         """Get user by username within a specific tenant"""
         result = await self.db.execute(
-            select(User).where(
-                User.username == username,
-                User.tenant_id == tenant_id
-            )
+            select(User).where(User.username == username, User.tenant_id == tenant_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_by_email_and_tenant(self, email: str, tenant_id: str) -> Optional[User]:
+    async def get_by_email_and_tenant(self, email: str, tenant_id: str) -> User | None:
         """Get user by email within a specific tenant"""
         result = await self.db.execute(
-            select(User).where(
-                User.email == email,
-                User.tenant_id == tenant_id
-            )
+            select(User).where(User.email == email, User.tenant_id == tenant_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_id_and_tenant(self, user_id: str, tenant_id: str) -> User | None:
+        """Get user by ID and verify it belongs to the tenant"""
+        result = await self.db.execute(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id)
         )
         return result.scalar_one_or_none()
 
     async def authenticate(
         self, username: str, tenant_id: str, password: str
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Authenticate user by username, tenant, and password.
 
@@ -62,17 +64,17 @@ class UserRepository(BaseRepository[User]):
         self, tenant_id: str, username: str, email: str, password: str
     ) -> User:
         """Create a new user with hashed password"""
-        hashed = await asyncio.to_thread(get_password_hash, password) 
+        hashed = await asyncio.to_thread(get_password_hash, password)
         user = User(
             tenant_id=tenant_id,
             username=username,
             email=email,
             hashed_password=hashed,
-            is_active=True
+            is_active=True,
         )
         return await self.create(user)
 
-    async def update_password(self, user_id: str, new_password: str) -> Optional[User]:
+    async def update_password(self, user_id: str, new_password: str) -> User | None:
         """Update user password"""
         user = await self.get_by_id(user_id)
         if not user:
@@ -81,7 +83,7 @@ class UserRepository(BaseRepository[User]):
         user.hashed_password = get_password_hash(new_password)
         return await self.update(user)
 
-    async def deactivate(self, user_id: str) -> Optional[User]:
+    async def deactivate(self, user_id: str) -> User | None:
         """Deactivate user account"""
         user = await self.get_by_id(user_id)
         if not user:
@@ -90,7 +92,7 @@ class UserRepository(BaseRepository[User]):
         user.is_active = False
         return await self.update(user)
 
-    async def activate(self, user_id: str) -> Optional[User]:
+    async def activate(self, user_id: str) -> User | None:
         """Activate user account"""
         user = await self.get_by_id(user_id)
         if not user:

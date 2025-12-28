@@ -1,17 +1,17 @@
 """OpenTelemetry distributed tracing configuration"""
 import logging
-from typing import Optional
+
+from fastapi import FastAPI
 from opentelemetry import trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 logger = logging.getLogger(__name__)
@@ -39,15 +39,15 @@ class TelemetryConfig:
         self.service_name = service_name
         self.service_version = service_version
         self.enabled = enabled
-        self.tracer_provider: Optional[TracerProvider] = None
+        self.tracer_provider: TracerProvider | None = None
 
     def setup_telemetry(
         self,
         exporter_type: str = "console",
-        otlp_endpoint: Optional[str] = None,
-        jaeger_endpoint: Optional[str] = None,
-        sample_rate: float = 1.0
-    ) -> Optional[TracerProvider]:
+        otlp_endpoint: str | None = None,
+        jaeger_endpoint: str | None = None,
+        sample_rate: float = 1.0,
+    ) -> TracerProvider | None:
         """
         Initialize OpenTelemetry tracing
 
@@ -66,11 +66,13 @@ class TelemetryConfig:
 
         try:
             # Create resource with service information
-            resource = Resource(attributes={
-                SERVICE_NAME: self.service_name,
-                SERVICE_VERSION: self.service_version,
-                "deployment.environment": "development",  # Override from config
-            })
+            resource = Resource(
+                attributes={
+                    SERVICE_NAME: self.service_name,
+                    SERVICE_VERSION: self.service_version,
+                    "deployment.environment": "development",  # Override from config
+                }
+            )
 
             # Create tracer provider
             self.tracer_provider = TracerProvider(resource=resource)
@@ -84,8 +86,7 @@ class TelemetryConfig:
             elif exporter_type == "otlp" and otlp_endpoint:
                 # OTLP exporter for Jaeger, Tempo, Datadog, etc.
                 exporter = OTLPSpanExporter(
-                    endpoint=otlp_endpoint,
-                    insecure=True  # Use TLS in production
+                    endpoint=otlp_endpoint, insecure=True  # Use TLS in production
                 )
                 logger.info(f"Using OTLP span exporter: {otlp_endpoint}")
 
@@ -103,7 +104,9 @@ class TelemetryConfig:
                 return self.tracer_provider
 
             else:
-                logger.warning(f"Unknown exporter type '{exporter_type}', using console")
+                logger.warning(
+                    f"Unknown exporter type '{exporter_type}', using console"
+                )
                 exporter = ConsoleSpanExporter()
 
             # Add batch span processor
@@ -141,7 +144,7 @@ class TelemetryConfig:
             FastAPIInstrumentor.instrument_app(
                 app,
                 tracer_provider=self.tracer_provider,
-                excluded_urls="/health,/metrics"  # Don't trace health checks
+                excluded_urls="/health,/metrics",  # Don't trace health checks
             )
             logger.info("FastAPI instrumentation enabled")
         except Exception as e:
@@ -201,8 +204,7 @@ class TelemetryConfig:
 
         try:
             LoggingInstrumentor().instrument(
-                tracer_provider=self.tracer_provider,
-                set_logging_format=True
+                tracer_provider=self.tracer_provider, set_logging_format=True
             )
             logger.info("Logging instrumentation enabled")
         except Exception as e:
@@ -219,10 +221,10 @@ class TelemetryConfig:
 
 
 # Global telemetry instance
-_telemetry: Optional[TelemetryConfig] = None
+_telemetry: TelemetryConfig | None = None
 
 
-def get_telemetry() -> Optional[TelemetryConfig]:
+def get_telemetry() -> TelemetryConfig | None:
     """Get global telemetry instance"""
     return _telemetry
 

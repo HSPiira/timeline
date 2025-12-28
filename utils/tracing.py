@@ -1,17 +1,15 @@
 """Utility functions and decorators for distributed tracing"""
+import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Optional, Any
+
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
-import logging
 
 logger = logging.getLogger(__name__)
 
 
-def traced(
-    operation_name: Optional[str] = None,
-    attributes: Optional[dict] = None
-):
+def traced(operation_name=str | None, attributes=None):
     """
     Decorator to create a span for a function
 
@@ -30,6 +28,7 @@ def traced(
         operation_name: Name of the operation (defaults to function name)
         attributes: Additional attributes to add to the span
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
@@ -45,7 +44,11 @@ def traced(
                 # Add function arguments as attributes (be careful with sensitive data)
                 if kwargs:
                     for key, value in kwargs.items():
-                        if not key.startswith('_') and key not in ['password', 'token', 'secret']:
+                        if not key.startswith("_") and key not in [
+                            "password",
+                            "token",
+                            "secret",
+                        ]:
                             span.set_attribute(f"arg.{key}", str(value))
 
                 try:
@@ -71,7 +74,11 @@ def traced(
                 # Add function arguments
                 if kwargs:
                     for key, value in kwargs.items():
-                        if not key.startswith('_') and key not in ['password', 'token', 'secret']:
+                        if not key.startswith("_") and key not in [
+                            "password",
+                            "token",
+                            "secret",
+                        ]:
                             span.set_attribute(f"arg.{key}", str(value))
 
                 try:
@@ -85,6 +92,7 @@ def traced(
 
         # Return appropriate wrapper based on function type
         import asyncio
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         else:
@@ -106,7 +114,7 @@ def add_span_attributes(**attributes):
             span.set_attribute(key, value)
 
 
-def add_span_event(name: str, attributes: Optional[dict] = None):
+def add_span_event(name: str, attributes: dict | None = None):
     """
     Add an event to the current span
 
@@ -135,7 +143,7 @@ def set_span_error(exception: Exception):
         span.record_exception(exception)
 
 
-def get_trace_id() -> Optional[str]:
+def get_trace_id() -> str | None:
     """
     Get the current trace ID
 
@@ -147,11 +155,11 @@ def get_trace_id() -> Optional[str]:
     span = trace.get_current_span()
     if span:
         trace_id = span.get_span_context().trace_id
-        return format(trace_id, '032x')  # Convert to 32-char hex string
+        return format(trace_id, "032x")  # Convert to 32-char hex string
     return None
 
 
-def get_span_id() -> Optional[str]:
+def get_span_id() -> str | None:
     """
     Get the current span ID
 
@@ -161,7 +169,7 @@ def get_span_id() -> Optional[str]:
     span = trace.get_current_span()
     if span:
         span_id = span.get_span_context().span_id
-        return format(span_id, '016x')  # Convert to 16-char hex string
+        return format(span_id, "016x")  # Convert to 16-char hex string
     return None
 
 
@@ -178,7 +186,7 @@ class TracedOperation:
             await some_async_function()
     """
 
-    def __init__(self, operation_name: str, attributes: Optional[dict] = None):
+    def __init__(self, operation_name: str, attributes: dict | None = None):
         self.operation_name = operation_name
         self.attributes = attributes or {}
         self.tracer = trace.get_tracer(__name__)
@@ -186,12 +194,14 @@ class TracedOperation:
 
     def __enter__(self):
         self.span = self.tracer.start_span(self.operation_name)
+        assert self.span is not None
         self.span.__enter__()
         for key, value in self.attributes.items():
             self.span.set_attribute(key, value)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        assert self.span is not None
         if exc_type is not None:
             self.span.set_status(Status(StatusCode.ERROR, str(exc_val)))
             self.span.record_exception(exc_val)

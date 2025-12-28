@@ -6,8 +6,8 @@ This script helps identify why tokens are failing and provides actionable fixes.
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,13 +15,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 async def diagnose_account(account_id: str):
     """Diagnose OAuth issues for a specific email account"""
-    from core.database import AsyncSessionLocal
-    from models.email_account import EmailAccount
-    from integrations.email.encryption import CredentialEncryptor
-    from sqlalchemy import select
-    from google.oauth2.credentials import Credentials
-    from google.auth.transport.requests import Request
     from datetime import datetime
+
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from sqlalchemy import select
+
+    from core.database import AsyncSessionLocal
+    from integrations.email.encryption import CredentialEncryptor
+    from models.email_account import EmailAccount
 
     async with AsyncSessionLocal() as db:
         # Fetch account
@@ -69,7 +71,12 @@ async def diagnose_account(account_id: str):
             credentials_dict = encryptor.decrypt(account.credentials_encrypted)
 
             # Check for required fields
-            required_fields = ['access_token', 'refresh_token', 'client_id', 'client_secret']
+            required_fields = [
+                "access_token",
+                "refresh_token",
+                "client_id",
+                "client_secret",
+            ]
             missing = [f for f in required_fields if not credentials_dict.get(f)]
 
             if missing:
@@ -79,9 +86,13 @@ async def diagnose_account(account_id: str):
 
             print("✅ All required fields present:")
             print(f"   - access_token: {credentials_dict['access_token'][:20]}...")
-            print(f"   - refresh_token: {credentials_dict['refresh_token'][:20]}..." if credentials_dict.get('refresh_token') else "   - refresh_token: ❌ MISSING")
+            print(
+                f"   - refresh_token: {credentials_dict['refresh_token'][:20]}..."
+                if credentials_dict.get("refresh_token")
+                else "   - refresh_token: ❌ MISSING"
+            )
             print(f"   - client_id: {credentials_dict['client_id']}")
-            print(f"   - client_secret: ***hidden***")
+            print("   - client_secret: ***hidden***")
             print()
 
             # Test token refresh
@@ -90,12 +101,12 @@ async def diagnose_account(account_id: str):
             print(f"{'─'*60}")
 
             creds = Credentials(
-                token=credentials_dict.get('access_token'),
-                refresh_token=credentials_dict.get('refresh_token'),
-                token_uri='https://oauth2.googleapis.com/token',
-                client_id=credentials_dict['client_id'],
-                client_secret=credentials_dict['client_secret'],
-                scopes=['https://www.googleapis.com/auth/gmail.readonly']
+                token=credentials_dict.get("access_token"),
+                refresh_token=credentials_dict.get("refresh_token"),
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=credentials_dict["client_id"],
+                client_secret=credentials_dict["client_secret"],
+                scopes=["https://www.googleapis.com/auth/gmail.readonly"],
             )
 
             print("Attempting to refresh access token...")
@@ -108,14 +119,17 @@ async def diagnose_account(account_id: str):
                 print()
 
                 # Offer to save new token
-                print("Would you like to save the refreshed token to the database? (y/n): ", end='')
+                print(
+                    "Would you like to save the refreshed token to the database? (y/n): ",
+                    end="",
+                )
                 response = input().lower()
-                if response == 'y':
+                if response == "y":
                     updated_creds = {
-                        'access_token': creds.token,
-                        'refresh_token': creds.refresh_token,
-                        'client_id': credentials_dict['client_id'],
-                        'client_secret': credentials_dict['client_secret']
+                        "access_token": creds.token,
+                        "refresh_token": creds.refresh_token,
+                        "client_id": credentials_dict["client_id"],
+                        "client_secret": credentials_dict["client_secret"],
                     }
                     account.credentials_encrypted = encryptor.encrypt(updated_creds)
                     account.token_last_refreshed_at = datetime.utcnow()
@@ -131,14 +145,16 @@ async def diagnose_account(account_id: str):
                 print("🔧 Root Cause Analysis:")
 
                 error_msg = str(e)
-                if 'invalid_grant' in error_msg:
+                if "invalid_grant" in error_msg:
                     print("   • Refresh token has been revoked or expired")
                     print("   • This happens when:")
-                    print("     - User manually revoked access in Google account settings")
+                    print(
+                        "     - User manually revoked access in Google account settings"
+                    )
                     print("     - 6 months of complete inactivity (rare)")
                     print("     - Initial OAuth didn't use access_type='offline'")
                     print()
-                elif 'invalid_client' in error_msg:
+                elif "invalid_client" in error_msg:
                     print("   • Client ID or Client Secret is incorrect")
                     print("   • Check your Google Cloud Console credentials")
                     print()
@@ -147,17 +163,20 @@ async def diagnose_account(account_id: str):
                     print()
 
                 print("💡 Fix Required:")
-                print("   1. Generate new OAuth credentials with correct settings:")
-                print(f"      python scripts/gmail_oauth_helper.py generate \\")
-                print(f"        --client-id YOUR_CLIENT_ID \\")
-                print(f"        --client-secret YOUR_CLIENT_SECRET \\")
-                print(f"        --output /tmp/new_creds.json")
+                print("   1. Re-authenticate through the OAuth API:")
+                print(
+                    f"      POST /api/oauth-providers/{account.provider_type}/authorize"
+                )
+                print(f'      {{"subject_id": "{account.subject_id}"}}')
                 print()
-                print("   2. Update this account via API:")
-                print(f"      PATCH /email-accounts/{account_id}")
-                print("      with the new credentials from new_creds.json")
+                print("   2. Follow the returned authorization URL in your browser")
                 print()
-                print("   3. After this ONE-TIME fix, tokens will auto-refresh forever!")
+                print(
+                    "   3. After successful OAuth callback, tokens will auto-refresh forever!"
+                )
+                print()
+                print("   Note: OAuth credentials are now managed through the API.")
+                print("         See OAUTH_IMPLEMENTATION_STATUS.md for details.")
                 print()
 
         except Exception as e:
@@ -171,14 +190,14 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Diagnose email account OAuth issues",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument('account_id', help='Email account ID to diagnose')
+    parser.add_argument("account_id", help="Email account ID to diagnose")
 
     args = parser.parse_args()
 
     asyncio.run(diagnose_account(args.account_id))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

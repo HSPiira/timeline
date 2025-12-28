@@ -11,14 +11,14 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Database
-    database_url: str
+    database_url: str = ""  # Loaded from environment, validated in model_validator
     database_echo: bool = False
 
     # Security
-    secret_key: str
+    secret_key: str = ""  # Loaded from environment, validated in model_validator
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480  # 8 hours
-    encryption_salt: str  # Required - no default
+    encryption_salt: str = ""  # Loaded from environment, validated in model_validator
 
     # CORS - comma-separated list of allowed origins
     allowed_origins: str = "http://localhost:3000,http://localhost:8080"
@@ -60,11 +60,22 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_storage_config(self) -> "Settings":
-        """Validate storage backend configuration"""
+        """Validate storage backend and required configuration"""
+        # Validate required fields are loaded from environment
+        if not self.database_url:
+            raise ValueError(
+                "DATABASE_URL is required. Set in environment or .env file."
+            )
+        if not self.secret_key:
+            raise ValueError(
+                "SECRET_KEY is required. Generate with: openssl rand -hex 32"
+            )
         if not self.encryption_salt:
             raise ValueError(
                 "ENCRYPTION_SALT is required. Generate with: openssl rand -hex 16"
             )
+
+        # Validate storage backend
         if self.storage_backend == "s3":
             if not self.s3_bucket:
                 raise ValueError(

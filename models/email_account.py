@@ -43,12 +43,34 @@ class EmailAccount(MultiTenantModel, Base):
         JSON, nullable=True
     )
 
+    # OAuth integration tracking (for OAuth providers)
+    oauth_provider_config_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )  # Which config version was used
+    oauth_provider_config_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )  # Config version at connection time
+    granted_scopes: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )  # Actual scopes user granted
+
     # Sync metadata
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     webhook_id: Mapped[str | None] = mapped_column(
         String, nullable=True
     )  # For providers with webhook support
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # OAuth status tracking (enhanced failure handling)
+    oauth_status: Mapped[str] = mapped_column(
+        String, nullable=False, default="active", index=True
+    )  # active, consent_denied, refresh_failed, revoked, expired, unknown
+    oauth_error_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )  # Consecutive errors
+    oauth_next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )  # Exponential backoff
 
     # Token health monitoring (prevents re-authentication issues)
     token_last_refreshed_at: Mapped[datetime | None] = mapped_column(

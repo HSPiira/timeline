@@ -1,39 +1,48 @@
 """Email account API endpoints"""
 from typing import Annotated
-from fastapi import APIRouter, Depends, Request, status, HTTPException, BackgroundTasks
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.params import Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_db, get_db_transactional, get_current_tenant, get_event_service_transactional
-from models.tenant import Tenant
+from api.deps import (
+    get_current_tenant,
+    get_db,
+    get_db_transactional,
+    get_event_service_transactional,
+)
+from core.logging import get_logger
+from integrations.email.encryption import CredentialEncryptor
+from integrations.email.sync import AuthenticationError, UniversalEmailSync
 from models.email_account import EmailAccount
 from models.subject import Subject
+from models.tenant import Tenant
+from repositories.subject_repo import SubjectRepository
 from schemas.email_account import (
     EmailAccountCreate,
-    EmailAccountUpdate,
     EmailAccountResponse,
+    EmailAccountUpdate,
     EmailSyncRequest,
     EmailSyncResponse,
-    WebhookSetupRequest
+    WebhookSetupRequest,
 )
-from integrations.email.encryption import CredentialEncryptor
-from integrations.email.sync import UniversalEmailSync, AuthenticationError
 from services.event_service import EventService
-from core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 
-@router.post("/", response_model=EmailAccountResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=EmailAccountResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_email_account(
     data: EmailAccountCreate,
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     """Create a new email account configuration"""
     encryptor = CredentialEncryptor()
@@ -42,8 +51,8 @@ async def create_email_account(
     result = await db.execute(
         select(Subject).where(
             Subject.tenant_id == tenant.id,
-            Subject.subject_type == 'email_account',
-            Subject.external_ref == data.email_address
+            Subject.subject_type == "email_account",
+            Subject.external_ref == data.email_address,
         )
     )
     subject = result.scalar_one_or_none()
@@ -52,9 +61,9 @@ async def create_email_account(
         # Create new subject
         subject = Subject(
             tenant_id=tenant.id,
-            subject_type='email_account',
+            subject_type="email_account",
             external_ref=data.email_address,
-            metadata={'email': data.email_address, 'provider': data.provider_type}
+            metadata={"email": data.email_address, "provider": data.provider_type},
         )
         db.add(subject)
         await db.flush()
@@ -69,7 +78,7 @@ async def create_email_account(
         provider_type=data.provider_type,
         email_address=data.email_address,
         credentials_encrypted=credentials_encrypted,
-        connection_params=data.connection_params
+        connection_params=data.connection_params,
     )
 
     db.add(email_account)
@@ -88,8 +97,8 @@ async def create_email_account(
 async def list_email_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000)
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ):
     """List all email accounts for the tenant"""
     result = await db.execute(
@@ -106,21 +115,19 @@ async def list_email_accounts(
 async def get_email_account(
     account_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     """Get a specific email account by ID"""
     result = await db.execute(
         select(EmailAccount).where(
-            EmailAccount.id == account_id,
-            EmailAccount.tenant_id == tenant.id
+            EmailAccount.id == account_id, EmailAccount.tenant_id == tenant.id
         )
     )
     account = result.scalar_one_or_none()
 
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
         )
 
     return EmailAccountResponse.model_validate(account)
@@ -131,21 +138,19 @@ async def update_email_account(
     account_id: str,
     data: EmailAccountUpdate,
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     """Update email account configuration"""
     result = await db.execute(
         select(EmailAccount).where(
-            EmailAccount.id == account_id,
-            EmailAccount.tenant_id == tenant.id
+            EmailAccount.id == account_id, EmailAccount.tenant_id == tenant.id
         )
     )
     account = result.scalar_one_or_none()
 
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
         )
 
     # Update fields
@@ -169,21 +174,19 @@ async def update_email_account(
 async def delete_email_account(
     account_id: str,
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     """Delete email account (soft delete by deactivating)"""
     result = await db.execute(
         select(EmailAccount).where(
-            EmailAccount.id == account_id,
-            EmailAccount.tenant_id == tenant.id
+            EmailAccount.id == account_id, EmailAccount.tenant_id == tenant.id
         )
     )
     account = result.scalar_one_or_none()
 
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
         )
 
     account.is_active = False
@@ -197,27 +200,25 @@ async def sync_email_account(
     sync_request: EmailSyncRequest,
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    event_service: Annotated[EventService, Depends(get_event_service_transactional)]
+    event_service: Annotated[EventService, Depends(get_event_service_transactional)],
 ):
     """Trigger email sync for account"""
     result = await db.execute(
         select(EmailAccount).where(
-            EmailAccount.id == account_id,
-            EmailAccount.tenant_id == tenant.id
+            EmailAccount.id == account_id, EmailAccount.tenant_id == tenant.id
         )
     )
     account = result.scalar_one_or_none()
 
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
         )
 
     if not account.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email account is deactivated"
+            detail="Email account is deactivated",
         )
 
     # Perform sync
@@ -225,14 +226,12 @@ async def sync_email_account(
 
     try:
         stats = await sync_service.sync_account(
-            account,
-            incremental=sync_request.incremental
+            account, incremental=sync_request.incremental
         )
         return EmailSyncResponse(**stats)
     except AuthenticationError as e:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e)
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)
         ) from e
 
 
@@ -244,7 +243,7 @@ async def sync_email_account_background(
     background_tasks: BackgroundTasks,
     sync_request: EmailSyncRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    tenant: Annotated[Tenant, Depends(get_current_tenant)]
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     """
     Trigger email sync in background.
@@ -255,22 +254,20 @@ async def sync_email_account_background(
     # Verify email account exists
     result = await db.execute(
         select(EmailAccount).where(
-            EmailAccount.id == account_id,
-            EmailAccount.tenant_id == tenant.id
+            EmailAccount.id == account_id, EmailAccount.tenant_id == tenant.id
         )
     )
     account = result.scalar_one_or_none()
 
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
         )
 
     if not account.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email account is deactivated"
+            detail="Email account is deactivated",
         )
 
     # Add sync task to background
@@ -278,7 +275,7 @@ async def sync_email_account_background(
         _run_email_sync_background,
         account_id=account_id,
         tenant_id=tenant.id,
-        incremental=sync_request.incremental
+        incremental=sync_request.incremental,
     )
 
     return {
@@ -286,11 +283,13 @@ async def sync_email_account_background(
         "email_account_id": account_id,
         "email_address": account.email_address,
         "status": "queued",
-        "incremental": sync_request.incremental
+        "incremental": sync_request.incremental,
     }
 
 
-async def _run_email_sync_background(account_id: str, tenant_id: str, incremental: bool = True):
+async def _run_email_sync_background(
+    account_id: str, tenant_id: str, incremental: bool = True
+):
     """
     Background task to run email sync.
 
@@ -309,8 +308,7 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, incrementa
             # Get email account
             result = await db.execute(
                 select(EmailAccount).where(
-                    EmailAccount.id == account_id,
-                    EmailAccount.tenant_id == tenant_id
+                    EmailAccount.id == account_id, EmailAccount.tenant_id == tenant_id
                 )
             )
             account = result.scalar_one_or_none()
@@ -323,7 +321,10 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, incrementa
             event_repo = EventRepository(db)
             schema_repo = EventSchemaRepository(db)
             hash_service = HashService()
-            event_service = EventService(event_repo, schema_repo, hash_service)
+            subject_repo = SubjectRepository(db)
+            event_service = EventService(
+                event_repo, hash_service, subject_repo, schema_repo
+            )
 
             # Run sync
             sync_service = UniversalEmailSync(db, event_service)
@@ -336,14 +337,12 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, incrementa
 
         except AuthenticationError as e:
             logger.error(
-                f"Authentication failed for account {account_id}: {e}",
-                exc_info=True
+                f"Authentication failed for account {account_id}: {e}", exc_info=True
             )
             # Could notify user via webhook or email that re-authentication is needed
         except Exception as e:
             logger.error(
-                f"Background sync failed for account {account_id}: {e}",
-                exc_info=True
+                f"Background sync failed for account {account_id}: {e}", exc_info=True
             )
 
 
@@ -353,21 +352,19 @@ async def setup_webhook(
     webhook_request: WebhookSetupRequest,
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    event_service: Annotated[EventService, Depends(get_event_service_transactional)]
+    event_service: Annotated[EventService, Depends(get_event_service_transactional)],
 ):
     """Setup webhook for real-time email sync"""
     result = await db.execute(
         select(EmailAccount).where(
-            EmailAccount.id == account_id,
-            EmailAccount.tenant_id == tenant.id
+            EmailAccount.id == account_id, EmailAccount.tenant_id == tenant.id
         )
     )
     account = result.scalar_one_or_none()
 
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
         )
 
     # Setup webhook
@@ -375,20 +372,19 @@ async def setup_webhook(
 
     try:
         webhook_config = await sync_service.setup_webhook(
-            account,
-            webhook_request.callback_url
+            account, webhook_request.callback_url
         )
 
         # Store webhook ID
-        account.webhook_id = webhook_config.get('id') or webhook_config.get('subscriptionId')
+        account.webhook_id = webhook_config.get("id") or webhook_config.get(
+            "subscriptionId"
+        )
         if not account.webhook_id:
-           logger.warning(f"Webhook setup response missing ID: {webhook_config}")
-
+            logger.warning(f"Webhook setup response missing ID: {webhook_config}")
 
         return webhook_config
 
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
         ) from e

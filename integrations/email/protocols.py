@@ -1,14 +1,15 @@
 """Universal email provider protocols and data structures"""
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol, Optional, Any
+from typing import Any, Protocol
 
 
 @dataclass
 class EmailMessage:
     """Universal email message structure (provider-agnostic)"""
+
     message_id: str
-    thread_id: Optional[str]
+    thread_id: str | None
     from_address: str
     to_addresses: list[str]
     subject: str
@@ -23,10 +24,14 @@ class EmailMessage:
 @dataclass
 class EmailProviderConfig:
     """Provider configuration and credentials"""
+
     provider_type: str  # gmail, outlook, imap
     email_address: str
     credentials: dict[str, Any]  # provider-specific credentials
-    connection_params: dict[str, Any] = field(default_factory=dict)  # optional connection parameters
+    connection_params: dict[str, Any] = field(
+        default_factory=dict
+    )  # optional connection parameters
+
 
 class IEmailProvider(Protocol):
     """Universal email provider interface (Dependency Inversion Principle)"""
@@ -40,9 +45,7 @@ class IEmailProvider(Protocol):
         ...
 
     async def fetch_messages(
-        self,
-        since: Optional[datetime] = None,
-        limit: int = 100
+        self, since: datetime | None = None, limit: int = 100
     ) -> list[EmailMessage]:
         """
         Fetch messages from provider.
