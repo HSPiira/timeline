@@ -97,8 +97,10 @@ async def create_email_account(
 async def list_email_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Max records to return")
+    ] = 100,
 ):
     """List all email accounts for the tenant"""
     result = await db.execute(

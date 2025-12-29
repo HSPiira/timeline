@@ -178,7 +178,7 @@ class VersionedMixin:
             # ... other columns
 
         # In service:
-        # SQLAlchemy will automatically increment version on each update
+        # Version must be explicitly incremented on each update
         # To detect conflicts:
         # result = await db.execute(
         #     update(Model)

@@ -84,7 +84,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     Can be overridden per-endpoint using Body(..., max_size=...)
     """
 
-    def __init__(self, app, max_request_size: int = 10 * 1024 * 1024):
+    def __init__(self, app, max_request_size: int = 10 * 1024 * 1024) -> None:
         super().__init__(app)
         self.max_request_size = max_request_size
 

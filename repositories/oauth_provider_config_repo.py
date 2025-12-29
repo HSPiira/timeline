@@ -132,7 +132,7 @@ class OAuthProviderConfigRepository(BaseRepository[OAuthProviderConfig]):
                 tenant_id=tenant_id,
                 provider_type=provider_type,
                 display_name=self._get_display_name(provider_type),
-                version=1,
+                version=0,
                 is_active=True,
                 client_id_encrypted=client_id_encrypted,
                 client_secret_encrypted=client_secret_encrypted,
@@ -147,9 +147,10 @@ class OAuthProviderConfigRepository(BaseRepository[OAuthProviderConfig]):
                 created_by=created_by,
             )
 
-        self.db.add(new_config)
-        await self.db.flush()
-        await self.db.refresh(new_config)
+        # self.db.add(new_config)
+        # await self.db.flush()
+        # await self.db.refresh(new_config)
+        await self.create(new_config)
         return new_config
 
     async def increment_connection_count(self, config_id: str) -> bool:
