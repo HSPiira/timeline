@@ -526,7 +526,6 @@ docs/build/
 uploads/
 media/
 /storage/
-documents/
 
 # Large files
 *.pdf

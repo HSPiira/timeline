@@ -7,12 +7,13 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from core.auth import create_access_token, get_password_hash
-from core.database import Base, get_db
-from main import app
-from models.subject import Subject
-from models.tenant import Tenant
-from models.user import User
+from src.infrastructure.security.jwt import create_access_token
+from src.infrastructure.security.password import get_password_hash
+from src.infrastructure.persistence.database import Base, get_db
+from src.main import app
+from src.infrastructure.persistence.models.subject import Subject
+from src.infrastructure.persistence.models.tenant import Tenant
+from src.infrastructure.persistence.models.user import User
 
 # Test database URL - use a separate test database
 TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost/timeline_test"

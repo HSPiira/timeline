@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from integrations.email.protocols import EmailMessage
-from integrations.email.sync import AuthenticationError, UniversalEmailSync
-from models.email_account import EmailAccount
-from models.subject import Subject
-from repositories.event_repo import EventRepository
+from src.infrastructure.external.email.protocols import EmailMessage
+from src.infrastructure.external.email.sync import AuthenticationError, UniversalEmailSync
+from src.infrastructure.persistence.models.email_account import EmailAccount
+from src.infrastructure.persistence.models.subject import Subject
+from src.infrastructure.persistence.repositories.event_repo import EventRepository
 
 
 @pytest.fixture
