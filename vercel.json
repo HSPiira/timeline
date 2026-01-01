@@ -18,8 +18,7 @@
   "functions": {
     "src/main.py": {
       "memory": 1024,
-      "maxDuration": 60,
-      "excludeFiles": "{.venv,.venv/**,.git,.git/**,__pycache__,**/__pycache__/**,.pytest_cache,.pytest_cache/**,.mypy_cache,.mypy_cache/**,.ruff_cache,.ruff_cache/**,.vscode,.vscode/**,tests,tests/**,docs,docs/**,scripts,scripts/**,summaries,summaries/**,storage,storage/**,*.md,*.txt,*.log,.env.example,.gitignore,alembic.ini,pytest.ini,pyproject.toml,uv.lock,requirements-dev.txt}"
+      "maxDuration": 60
     }
   },
   "env": {
