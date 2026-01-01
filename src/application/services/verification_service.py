@@ -9,7 +9,7 @@ Verifies that event chains are intact and untampered by:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from src.application.services.hash_service import HashService
@@ -110,7 +110,7 @@ class VerificationService:
                 valid_events=0,
                 invalid_events=0,
                 is_chain_valid=True,  # Empty chain is valid
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc),
                 event_results=[],
             )
 
@@ -134,7 +134,7 @@ class VerificationService:
             valid_events=valid_count,
             invalid_events=invalid_count,
             is_chain_valid=(invalid_count == 0),
-            verified_at=datetime.utcnow(),
+            verified_at=datetime.now(timezone.utc),
             event_results=event_results,
         )
 
@@ -162,7 +162,7 @@ class VerificationService:
                 valid_events=0,
                 invalid_events=0,
                 is_chain_valid=True,
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc),
                 event_results=[],
             )
 
@@ -201,7 +201,7 @@ class VerificationService:
             valid_events=valid_count,
             invalid_events=invalid_count,
             is_chain_valid=(invalid_count == 0),
-            verified_at=datetime.utcnow(),
+            verified_at=datetime.now(timezone.utc),
             event_results=all_results,
         )
 

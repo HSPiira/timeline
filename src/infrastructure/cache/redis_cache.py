@@ -60,7 +60,7 @@ class CacheService:
             except (redis.ConnectionError, redis.TimeoutError) as e:
                 logger.warning(
                     f"Redis connection failed: {e}. "
-                    f"Cache disabled - falling back to database queries."
+                    "Cache disabled - falling back to database queries."
                 )
                 self._connected = False
                 self.redis = None

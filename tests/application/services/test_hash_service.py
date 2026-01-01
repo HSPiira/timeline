@@ -64,10 +64,6 @@ class TestHashService:
         # THEN
         # The expected hash is a SHA256 of the canonical parts joined by '|'
         # tenant|subject|type|timestamp|payload|GENESIS
-        expected_base = (
-            "tenant-123|subject-456|TEST_EVENT|2023-01-01T12:00:00+00:00|"
-            '{"data":"value"}|GENESIS'
-        )
         expected_hash = "c187653198a0d273767f73956f43734e02b6659a4336d3a146a815777a4521f5"
         assert event_hash == expected_hash
 
@@ -97,10 +93,5 @@ class TestHashService:
 
         # THEN
         # The base string now includes the actual previous hash
-        expected_base = (
-            "tenant-123|subject-456|TEST_EVENT|2023-01-01T12:00:00+00:00|"
-            '{"data":"new_value"}|'
-            "c187653198a0d273767f73956f43734e02b6659a4336d3a146a815777a4521f5"
-        )
         expected_hash = "b5a9b83a73c1505315206380619e06180637048731d102061f1c7d81223e7512"
         assert event_hash == expected_hash

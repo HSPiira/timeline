@@ -437,7 +437,6 @@ class TestLocalStorageAtomicWrites:
         # GIVEN
         storage_ref = "tenants/acme/documents/doc_123/v1/test.txt"
         wrong_checksum = "0" * 64
-        storage_root = Path(temp_storage_root)
 
         # WHEN - Upload will fail due to checksum mismatch
         try:

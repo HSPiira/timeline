@@ -8,11 +8,11 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.external.email.envelope_encryption import (
+    EnvelopeEncryptor, OAuthStateManager)
 from src.infrastructure.external.email.oauth_drivers import OAuthDriverRegistry
 from src.infrastructure.persistence.database import get_db
 from src.infrastructure.persistence.models.email_account import EmailAccount
-from src.infrastructure.persistence.models.oauth_provider_config import (
-    EnvelopeEncryptor, OAuthStateManager)
 from src.infrastructure.persistence.models.subject import Subject
 from src.infrastructure.persistence.repositories.oauth_provider_config_repo import (
     OAuthAuditLogRepository, OAuthProviderConfigRepository,
