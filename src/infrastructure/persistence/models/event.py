@@ -3,16 +3,8 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import (
-    JSON,
-    CheckConstraint,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    event,
-)
+from sqlalchemy import (JSON, CheckConstraint, DateTime, ForeignKey, Index,
+                        Integer, String, event)
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from sqlalchemy.sql import func
 
@@ -41,23 +33,17 @@ class Event(CuidMixin, TenantMixin, Base):
     schema_version: Mapped[int] = mapped_column(
         Integer, nullable=False
     )  # Immutable - tracks which schema version was used
-    event_time: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     previous_hash: Mapped[str | None] = mapped_column(String)
     hash: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         # Indexes for query performance
         Index("ix_event_subject_time", "subject_id", "event_time"),
         Index("ix_event_tenant_subject", "tenant_id", "subject_id"),
-        Index(
-            "ix_event_tenant_type_version", "tenant_id", "event_type", "schema_version"
-        ),
+        Index("ix_event_tenant_type_version", "tenant_id", "event_type", "schema_version"),
         # Immutability enforcement: created_at must always be set (prevents updates)
         CheckConstraint("created_at IS NOT NULL", name="ck_event_created_at_immutable"),
     )
@@ -134,7 +120,8 @@ class Event(CuidMixin, TenantMixin, Base):
             # Enforce temporal ordering
             if event_time <= prev_event.event_time:
                 raise ValueError(
-                    f"Event time {event_time} must be after previous event time {prev_event.event_time}"
+                    f"Event time {event_time} must be after "
+                    f"previous event time {prev_event.event_time}"
                 )
 
         # Compute hash with validated inputs
@@ -168,6 +155,5 @@ def prevent_event_updates(mapper, connection, target):
     This is fundamental to event sourcing and audit trail integrity.
     """
     raise ValueError(
-        "Events are immutable and cannot be updated. "
-        "Create a new compensating event instead."
+        "Events are immutable and cannot be updated. " "Create a new compensating event instead."
     )

@@ -1,12 +1,13 @@
 """Unit tests for VerificationService"""
+
 from datetime import datetime
 from unittest.mock import AsyncMock
 
 import pytest
 
-from src.infrastructure.persistence.models.event import Event
 from src.application.services.hash_service import HashService
 from src.application.services.verification_service import VerificationService
+from src.infrastructure.persistence.models.event import Event
 
 
 @pytest.fixture
@@ -213,9 +214,7 @@ class TestVerifySubjectChain:
         assert result.event_results[0].error_type == "HASH_MISMATCH"
 
     @pytest.mark.asyncio
-    async def test_broken_chain_detected(
-        self, verification_service, mock_event_repo, hash_service
-    ):
+    async def test_broken_chain_detected(self, verification_service, mock_event_repo, hash_service):
         """
         GIVEN events with broken previous_hash link
         WHEN verifying chain
@@ -304,9 +303,7 @@ class TestVerifyTenantChains:
         mock_event_repo.get_by_tenant.return_value = [event_a1, event_a2, event_b1]
 
         # WHEN
-        result = await verification_service.verify_tenant_chains(
-            tenant_id="tenant_123", limit=100
-        )
+        result = await verification_service.verify_tenant_chains(tenant_id="tenant_123", limit=100)
 
         # THEN
         assert result.is_chain_valid is True
@@ -349,9 +346,7 @@ class TestVerifyTenantChains:
         mock_event_repo.get_by_tenant.return_value = [event_a1, event_b1]
 
         # WHEN
-        result = await verification_service.verify_tenant_chains(
-            tenant_id="tenant_123", limit=100
-        )
+        result = await verification_service.verify_tenant_chains(tenant_id="tenant_123", limit=100)
 
         # THEN
         assert result.is_chain_valid is False

@@ -1,7 +1,9 @@
 from datetime import datetime
+
 import pytest
-from src.application.services.hash_service import HashService, SHA256Algorithm
 from freezegun import freeze_time
+
+from src.application.services.hash_service import HashService, SHA256Algorithm
 
 # A fixed timestamp for reproducible tests
 FROZEN_TIME = "2023-01-01T12:00:00Z"

@@ -1,10 +1,12 @@
 """Repository for workflow data access"""
+
 from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.persistence.models.workflow import Workflow, WorkflowExecution
+from src.infrastructure.persistence.models.workflow import (Workflow,
+                                                            WorkflowExecution)
 
 
 class WorkflowRepository:
@@ -97,9 +99,7 @@ class WorkflowExecutionRepository:
         await self.db.refresh(execution)
         return execution
 
-    async def get_by_id(
-        self, execution_id: str, tenant_id: str
-    ) -> WorkflowExecution | None:
+    async def get_by_id(self, execution_id: str, tenant_id: str) -> WorkflowExecution | None:
         """Get execution by ID"""
         stmt = select(WorkflowExecution).where(
             WorkflowExecution.id == execution_id,
@@ -126,9 +126,7 @@ class WorkflowExecutionRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_by_event(
-        self, event_id: str, tenant_id: str
-    ) -> list[WorkflowExecution]:
+    async def get_by_event(self, event_id: str, tenant_id: str) -> list[WorkflowExecution]:
         """Get executions triggered by event"""
         stmt = (
             select(WorkflowExecution)

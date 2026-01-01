@@ -1,22 +1,16 @@
 """OAuth provider configuration model with versioning and envelope encryption"""
+
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    DateTime,
-    Index,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-)
+from sqlalchemy import (JSON, Boolean, DateTime, Index, Integer, String, Text,
+                        UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.persistence.database import Base
-from src.infrastructure.persistence.models.mixins import AuditedMultiTenantModel
+from src.infrastructure.persistence.models.mixins import \
+    AuditedMultiTenantModel
 
 
 class OAuthProviderConfig(AuditedMultiTenantModel, Base):
@@ -42,9 +36,7 @@ class OAuthProviderConfig(AuditedMultiTenantModel, Base):
     provider_type: Mapped[str] = mapped_column(
         String, nullable=False, index=True
     )  # gmail, outlook, yahoo
-    display_name: Mapped[str] = mapped_column(
-        String, nullable=False
-    )  # "Gmail", "Microsoft 365"
+    display_name: Mapped[str] = mapped_column(String, nullable=False)  # "Gmail", "Microsoft 365"
 
     # Version management
     version: Mapped[int] = mapped_column(
@@ -70,9 +62,7 @@ class OAuthProviderConfig(AuditedMultiTenantModel, Base):
     )  # References external KMS key
 
     # OAuth configuration
-    redirect_uri: Mapped[str] = mapped_column(
-        String, nullable=False
-    )  # Must match provider console
+    redirect_uri: Mapped[str] = mapped_column(String, nullable=False)  # Must match provider console
     redirect_uri_whitelist: Mapped[list[str]] = mapped_column(
         JSON, nullable=False, default=list
     )  # Allowed redirect URIs
@@ -108,9 +98,7 @@ class OAuthProviderConfig(AuditedMultiTenantModel, Base):
     rate_limit_connections_per_hour: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=10
     )
-    current_hour_connections: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    current_hour_connections: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rate_limit_reset_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -159,15 +147,11 @@ class OAuthState(Base):
     user_id: Mapped[str] = mapped_column(
         String, nullable=False, index=True
     )  # User initiating OAuth
-    provider_config_id: Mapped[str] = mapped_column(
-        String, nullable=False
-    )  # Which config was used
+    provider_config_id: Mapped[str] = mapped_column(String, nullable=False)  # Which config was used
 
     # Security
     nonce: Mapped[str] = mapped_column(String, nullable=False)  # Cryptographic nonce
-    signature: Mapped[str] = mapped_column(
-        String, nullable=False
-    )  # HMAC signature of payload
+    signature: Mapped[str] = mapped_column(String, nullable=False)  # HMAC signature of payload
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
@@ -179,9 +163,7 @@ class OAuthState(Base):
     consumed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, index=True
     )  # Replay protection
-    consumed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     callback_received_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -228,9 +210,7 @@ class OAuthAuditLog(Base):
     action: Mapped[str] = mapped_column(
         String, nullable=False, index=True
     )  # create, update, disable, delete, rotate
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
-    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
     # Change tracking
     changes: Mapped[dict[str, str]] = mapped_column(

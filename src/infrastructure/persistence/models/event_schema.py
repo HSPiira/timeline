@@ -1,6 +1,7 @@
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (JSON, Boolean, ForeignKey, Integer, String,
+                        UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.persistence.database import Base
@@ -27,9 +28,7 @@ class EventSchema(MultiTenantModel, Base):
     schema_definition: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False
     )  # Immutable after creation
-    version: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )  # Auto-incremented per event_type
+    version: Mapped[int] = mapped_column(Integer, nullable=False)  # Auto-incremented per event_type
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )  # Must be explicitly activated
@@ -40,7 +39,5 @@ class EventSchema(MultiTenantModel, Base):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "event_type", "version", name="uq_tenant_event_type_version"
-        ),
+        UniqueConstraint("tenant_id", "event_type", "version", name="uq_tenant_event_type_version"),
     )

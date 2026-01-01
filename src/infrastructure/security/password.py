@@ -6,9 +6,7 @@ import bcrypt
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
     try:
-        result = bcrypt.checkpw(
-            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
-        )
+        result = bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
         assert isinstance(result, bool)
         return result
     except ValueError:

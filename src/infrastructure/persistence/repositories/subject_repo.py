@@ -13,15 +13,10 @@ class SubjectRepository(BaseRepository[Subject]):
     def __init__(self, db: AsyncSession):
         super().__init__(db, Subject)
 
-    async def get_by_tenant(
-        self, tenant_id: str, skip: int = 0, limit: int = 100
-    ) -> list[Subject]:
+    async def get_by_tenant(self, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Subject]:
         """Get all subjects for a tenant with pagination"""
         result = await self.db.execute(
-            select(Subject)
-            .where(Subject.tenant_id == tenant_id)
-            .offset(skip)
-            .limit(limit)
+            select(Subject).where(Subject.tenant_id == tenant_id).offset(skip).limit(limit)
         )
         return list(result.scalars().all())
 
@@ -38,9 +33,7 @@ class SubjectRepository(BaseRepository[Subject]):
         )
         return list(result.scalars().all())
 
-    async def get_by_external_ref(
-        self, tenant_id: str, external_ref: str
-    ) -> Subject | None:
+    async def get_by_external_ref(self, tenant_id: str, external_ref: str) -> Subject | None:
         """Get subject by external reference"""
         result = await self.db.execute(
             select(Subject).where(
@@ -49,13 +42,9 @@ class SubjectRepository(BaseRepository[Subject]):
         )
         return result.scalar_one_or_none()
 
-    async def get_by_id_and_tenant(
-        self, subject_id: str, tenant_id: str
-    ) -> Subject | None:
+    async def get_by_id_and_tenant(self, subject_id: str, tenant_id: str) -> Subject | None:
         """Get subject by ID and verify it belongs to the tenant"""
         result = await self.db.execute(
-            select(Subject).where(
-                Subject.id == subject_id, Subject.tenant_id == tenant_id
-            )
+            select(Subject).where(Subject.id == subject_id, Subject.tenant_id == tenant_id)
         )
         return result.scalar_one_or_none()

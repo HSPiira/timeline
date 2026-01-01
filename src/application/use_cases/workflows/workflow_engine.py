@@ -19,9 +19,7 @@ if TYPE_CHECKING:
     from src.application.use_cases.events.create_event import EventService
     from src.infrastructure.persistence.models.event import Event
     from src.infrastructure.persistence.models.workflow import (
-        Workflow,
-        WorkflowExecution,
-    )
+        Workflow, WorkflowExecution)
 
 logger = get_logger(__name__)
 
@@ -33,9 +31,7 @@ class WorkflowEngine:
         self.db = db
         self.event_service = event_service
 
-    async def process_event_triggers(
-        self, event: Event, tenant_id: str
-    ) -> list[WorkflowExecution]:
+    async def process_event_triggers(self, event: Event, tenant_id: str) -> list[WorkflowExecution]:
         """
         Find and execute workflows triggered by event.
 
@@ -64,9 +60,7 @@ class WorkflowEngine:
 
         return executions
 
-    async def _find_matching_workflows(
-        self, event_type: str, tenant_id: str
-    ) -> list[Workflow]:
+    async def _find_matching_workflows(self, event_type: str, tenant_id: str) -> list[Workflow]:
         """Find active workflows for event type"""
         from src.infrastructure.persistence.models.workflow import Workflow
 
@@ -99,11 +93,10 @@ class WorkflowEngine:
 
         return True
 
-    async def _execute_workflow(
-        self, workflow: Workflow, triggered_by: Event
-    ) -> WorkflowExecution:
+    async def _execute_workflow(self, workflow: Workflow, triggered_by: Event) -> WorkflowExecution:
         """Execute workflow actions"""
-        from src.infrastructure.persistence.models.workflow import WorkflowExecution
+        from src.infrastructure.persistence.models.workflow import \
+            WorkflowExecution
         from src.presentation.api.v1.schemas.event import EventCreate
 
         logger.info(
@@ -166,9 +159,7 @@ class WorkflowEngine:
                             {"action": action_type, "status": "failed", "error": str(e)}
                         )
                         actions_failed += 1
-                        logger.warning(
-                            f"Workflow action failed: {action_type} - {str(e)}"
-                        )
+                        logger.warning(f"Workflow action failed: {action_type} - {str(e)}")
                 else:
                     execution_log.append(
                         {
@@ -187,9 +178,7 @@ class WorkflowEngine:
         except Exception as e:
             execution.status = "failed"
             execution.error_message = str(e)
-            logger.error(
-                f"Workflow execution {execution.id} failed: {str(e)}", exc_info=True
-            )
+            logger.error(f"Workflow execution {execution.id} failed: {str(e)}", exc_info=True)
 
         execution.completed_at = datetime.utcnow()
         execution.actions_executed = actions_executed

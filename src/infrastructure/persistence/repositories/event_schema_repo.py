@@ -36,9 +36,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
         max_version = result.scalar()
         return (max_version or 0) + 1
 
-    async def get_active_schema(
-        self, tenant_id: str, event_type: str
-    ) -> EventSchema | None:
+    async def get_active_schema(self, tenant_id: str, event_type: str) -> EventSchema | None:
         """
         Get active schema for event type and tenant
 
@@ -82,12 +80,8 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
                 "version": schema.version,
                 "schema_definition": schema.schema_definition,
                 "is_active": schema.is_active,
-                "created_at": schema.created_at.isoformat()
-                if schema.created_at
-                else None,
-                "updated_at": schema.updated_at.isoformat()
-                if schema.updated_at
-                else None,
+                "created_at": schema.created_at.isoformat() if schema.created_at else None,
+                "updated_at": schema.updated_at.isoformat() if schema.updated_at else None,
             }
             await self.cache.set(cache_key, schema_dict, ttl=self.cache_ttl)
 
@@ -108,9 +102,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
         )
         return result.scalar_one_or_none()
 
-    async def get_all_for_event_type(
-        self, tenant_id: str, event_type: str
-    ) -> list[EventSchema]:
+    async def get_all_for_event_type(self, tenant_id: str, event_type: str) -> list[EventSchema]:
         """Get all schema versions for event type"""
         result = await self.db.execute(
             select(EventSchema)
@@ -144,9 +136,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
             schema.is_active = False
             updated = await self.update(schema)
             # Invalidate cache
-            await self._invalidate_schema_cache(
-                str(schema.tenant_id), str(schema.event_type)
-            )
+            await self._invalidate_schema_cache(str(schema.tenant_id), str(schema.event_type))
             return updated
         return None
 
@@ -157,9 +147,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
             schema.is_active = True
             updated = await self.update(schema)
             # Invalidate cache
-            await self._invalidate_schema_cache(
-                str(schema.tenant_id), str(schema.event_type)
-            )
+            await self._invalidate_schema_cache(str(schema.tenant_id), str(schema.event_type))
             return updated
         return None
 

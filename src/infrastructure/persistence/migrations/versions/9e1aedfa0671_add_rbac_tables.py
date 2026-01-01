@@ -5,10 +5,10 @@ Revises: 934461a1e264
 Create Date: 2025-12-16 18:51:04.735621
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -93,15 +93,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["role_id"], ["role.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["permission_id"], ["permission.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["permission_id"], ["permission.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),
     )
     op.create_index("ix_role_permission_tenant_id", "role_permission", ["tenant_id"])
-    op.create_index(
-        "ix_role_permission_lookup", "role_permission", ["tenant_id", "role_id"]
-    )
+    op.create_index("ix_role_permission_lookup", "role_permission", ["tenant_id", "role_id"])
 
     # Create user_role table (many-to-many)
     op.create_table(

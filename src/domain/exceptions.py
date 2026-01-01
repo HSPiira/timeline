@@ -61,9 +61,7 @@ class AuthorizationException(TimelineException):
 
     def __init__(self, resource: str, action: str):
         message = f"Permission denied: {action} on {resource}"
-        super().__init__(
-            message, "AUTHORIZATION_ERROR", {"resource": resource, "action": action}
-        )
+        super().__init__(message, "AUTHORIZATION_ERROR", {"resource": resource, "action": action})
 
 
 class TenantNotFoundException(TimelineException):

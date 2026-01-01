@@ -1,17 +1,20 @@
 """OpenTelemetry distributed tracing configuration"""
+
 import logging
 
 from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+    OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import (BatchSpanProcessor,
+                                            ConsoleSpanExporter)
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 logger = logging.getLogger(__name__)
@@ -86,9 +89,7 @@ class TelemetryConfig:
             elif exporter_type == "otlp" and otlp_endpoint:
                 # OTLP exporter - use TLS for https:// endpoints
                 use_insecure = otlp_endpoint.startswith("http://")
-                exporter = OTLPSpanExporter(
-                    endpoint=otlp_endpoint, insecure=use_insecure
-                )
+                exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=use_insecure)
                 logger.info(f"Using OTLP span exporter: {otlp_endpoint}")
 
             elif exporter_type == "jaeger" and jaeger_endpoint:
@@ -105,9 +106,7 @@ class TelemetryConfig:
                 return self.tracer_provider
 
             else:
-                logger.warning(
-                    f"Unknown exporter type '{exporter_type}', using console"
-                )
+                logger.warning(f"Unknown exporter type '{exporter_type}', using console")
                 exporter = ConsoleSpanExporter()
 
             # Add batch span processor

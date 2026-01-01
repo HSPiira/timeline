@@ -1,4 +1,5 @@
 """Redis-based caching service for performance optimization"""
+
 from __future__ import annotations
 
 import json
@@ -45,9 +46,7 @@ class CacheService:
                     host=self.settings.redis_host,
                     port=self.settings.redis_port,
                     db=self.settings.redis_db,
-                    password=self.settings.redis_password
-                    if self.settings.redis_password
-                    else None,
+                    password=self.settings.redis_password if self.settings.redis_password else None,
                     decode_responses=True,
                     socket_connect_timeout=5,
                     socket_keepalive=True,
@@ -60,7 +59,8 @@ class CacheService:
                 )
             except (redis.ConnectionError, redis.TimeoutError) as e:
                 logger.warning(
-                    f"Redis connection failed: {e}. Cache disabled - falling back to database queries."
+                    f"Redis connection failed: {e}. "
+                    f"Cache disabled - falling back to database queries."
                 )
                 self._connected = False
                 self.redis = None
@@ -240,9 +240,7 @@ def cached(key_prefix: str, ttl: int = 300, key_builder: Callable | None = None)
             else:
                 # Default: combine prefix with all args/kwargs
                 key_parts = [str(arg) for arg in func_args]
-                key_parts.extend(
-                    f"{k}={v}" for k, v in sorted(kwargs.items()) if k != "cache"
-                )
+                key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()) if k != "cache")
                 cache_key = f"{key_prefix}:{':'.join(key_parts)}"
 
             # Try to get from cache

@@ -6,19 +6,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.presentation.api.dependencies import get_tenant_repo, get_tenant_repo_transactional
-from src.infrastructure.persistence.database import get_db_transactional
+from src.application.services.tenant_initialization_service import \
+    TenantInitializationService
 from src.domain.enums import TenantStatus
-from src.infrastructure.persistence.repositories.tenant_repo import TenantRepository
-from src.infrastructure.persistence.repositories.user_repo import UserRepository
-from src.presentation.api.v1.schemas.tenant import (
-    TenantCreate,
-    TenantCreateResponse,
-    TenantResponse,
-    TenantStatusUpdate,
-    TenantUpdate,
-)
-from src.application.services.tenant_initialization_service import TenantInitializationService
+from src.infrastructure.persistence.database import get_db_transactional
+from src.infrastructure.persistence.repositories.tenant_repo import \
+    TenantRepository
+from src.infrastructure.persistence.repositories.user_repo import \
+    UserRepository
+from src.presentation.api.dependencies import (get_tenant_repo,
+                                               get_tenant_repo_transactional)
+from src.presentation.api.v1.schemas.tenant import (TenantCreate,
+                                                    TenantCreateResponse,
+                                                    TenantResponse,
+                                                    TenantStatusUpdate,
+                                                    TenantUpdate)
 
 router = APIRouter()
 
@@ -35,9 +37,7 @@ def generate_secure_password(length: int = 16) -> str:
     return password
 
 
-@router.post(
-    "/", response_model=TenantCreateResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=TenantCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     data: TenantCreate, db: Annotated[AsyncSession, Depends(get_db_transactional)]
 ):
@@ -67,9 +67,7 @@ async def create_tenant(
         # Create admin user for the new tenant in the same transaction
         admin_username = "admin"
         # admin_password = "admin@123"
-        admin_password = (
-            generate_secure_password()
-        )  # Cryptographically secure random password
+        admin_password = generate_secure_password()  # Cryptographically secure random password
         admin_email = f"admin@{data.code}.tl"
 
         admin_user = await user_repo.create_user(
@@ -80,9 +78,7 @@ async def create_tenant(
         )
 
         # Initialize RBAC: create permissions, roles, and assign admin role
-        await init_service.initialize_tenant(
-            tenant_id=created.id, admin_user_id=admin_user.id
-        )
+        await init_service.initialize_tenant(tenant_id=created.id, admin_user_id=admin_user.id)
 
         return TenantCreateResponse(
             tenant=TenantResponse.model_validate(created),
@@ -98,9 +94,7 @@ async def create_tenant(
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)
-async def get_tenant(
-    tenant_id: str, repo: Annotated[TenantRepository, Depends(get_tenant_repo)]
-):
+async def get_tenant(tenant_id: str, repo: Annotated[TenantRepository, Depends(get_tenant_repo)]):
     """Get a tenant by ID"""
     tenant = await repo.get_by_id(tenant_id)
 

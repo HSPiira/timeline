@@ -5,12 +5,12 @@ Revises: 789b7fad5023
 Create Date: 2025-12-28 09:23:06.698192
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "086f991ff6d7"
@@ -38,19 +38,11 @@ def upgrade() -> None:
         nullable=False,
         existing_server_default=sa.text("now()"),
     )
-    op.create_index(
-        op.f("ix_document_created_by"), "document", ["created_by"], unique=False
-    )
-    op.create_index(
-        op.f("ix_document_deleted_at"), "document", ["deleted_at"], unique=False
-    )
+    op.create_index(op.f("ix_document_created_by"), "document", ["created_by"], unique=False)
+    op.create_index(op.f("ix_document_deleted_at"), "document", ["deleted_at"], unique=False)
     op.drop_constraint(op.f("document_tenant_id_fkey"), "document", type_="foreignkey")
-    op.create_foreign_key(
-        None, "document", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE"
-    )
-    op.create_foreign_key(
-        None, "document", "user", ["created_by"], ["id"], ondelete="SET NULL"
-    )
+    op.create_foreign_key(None, "document", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key(None, "document", "user", ["created_by"], ["id"], ondelete="SET NULL")
     op.alter_column(
         "email_account",
         "created_at",
@@ -67,9 +59,7 @@ def upgrade() -> None:
         existing_nullable=False,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_constraint(
-        op.f("email_account_tenant_id_fkey"), "email_account", type_="foreignkey"
-    )
+    op.drop_constraint(op.f("email_account_tenant_id_fkey"), "email_account", type_="foreignkey")
     op.create_foreign_key(
         None, "email_account", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE"
     )
@@ -81,18 +71,12 @@ def upgrade() -> None:
         unique=False,
     )
     op.drop_constraint(op.f("event_tenant_id_fkey"), "event", type_="foreignkey")
-    op.create_foreign_key(
-        None, "event", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE"
-    )
+    op.create_foreign_key(None, "event", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE")
     op.create_index(
         op.f("ix_event_schema_created_by"), "event_schema", ["created_by"], unique=False
     )
-    op.drop_constraint(
-        op.f("fk_event_schema_created_by_user"), "event_schema", type_="foreignkey"
-    )
-    op.create_foreign_key(
-        None, "event_schema", "user", ["created_by"], ["id"], ondelete="SET NULL"
-    )
+    op.drop_constraint(op.f("fk_event_schema_created_by_user"), "event_schema", type_="foreignkey")
+    op.create_foreign_key(None, "event_schema", "user", ["created_by"], ["id"], ondelete="SET NULL")
     op.drop_column("permission", "created_at")
     op.alter_column(
         "role",
@@ -117,9 +101,7 @@ def upgrade() -> None:
         existing_server_default=sa.text("now()"),
     )
     op.drop_constraint(op.f("subject_tenant_id_fkey"), "subject", type_="foreignkey")
-    op.create_foreign_key(
-        None, "subject", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE"
-    )
+    op.create_foreign_key(None, "subject", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE")
     op.alter_column(
         "tenant",
         "created_at",
@@ -141,29 +123,15 @@ def upgrade() -> None:
         nullable=False,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_constraint(
-        op.f("user_role_assigned_by_fkey"), "user_role", type_="foreignkey"
-    )
-    op.create_foreign_key(
-        None, "user_role", "user", ["assigned_by"], ["id"], ondelete="SET NULL"
-    )
+    op.drop_constraint(op.f("user_role_assigned_by_fkey"), "user_role", type_="foreignkey")
+    op.create_foreign_key(None, "user_role", "user", ["assigned_by"], ["id"], ondelete="SET NULL")
     op.add_column("workflow", sa.Column("updated_by", sa.String(), nullable=True))
     op.add_column("workflow", sa.Column("deleted_by", sa.String(), nullable=True))
-    op.create_index(
-        op.f("ix_workflow_created_by"), "workflow", ["created_by"], unique=False
-    )
-    op.create_index(
-        op.f("ix_workflow_deleted_at"), "workflow", ["deleted_at"], unique=False
-    )
-    op.create_foreign_key(
-        None, "workflow", "user", ["updated_by"], ["id"], ondelete="SET NULL"
-    )
-    op.create_foreign_key(
-        None, "workflow", "user", ["created_by"], ["id"], ondelete="SET NULL"
-    )
-    op.create_foreign_key(
-        None, "workflow", "user", ["deleted_by"], ["id"], ondelete="SET NULL"
-    )
+    op.create_index(op.f("ix_workflow_created_by"), "workflow", ["created_by"], unique=False)
+    op.create_index(op.f("ix_workflow_deleted_at"), "workflow", ["deleted_at"], unique=False)
+    op.create_foreign_key(None, "workflow", "user", ["updated_by"], ["id"], ondelete="SET NULL")
+    op.create_foreign_key(None, "workflow", "user", ["created_by"], ["id"], ondelete="SET NULL")
+    op.create_foreign_key(None, "workflow", "user", ["deleted_by"], ["id"], ondelete="SET NULL")
     op.add_column(
         "workflow_execution",
         sa.Column(
@@ -173,9 +141,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.drop_index(
-        op.f("ix_workflow_execution_created_at"), table_name="workflow_execution"
-    )
+    op.drop_index(op.f("ix_workflow_execution_created_at"), table_name="workflow_execution")
     # ### end Alembic commands ###
 
 
@@ -276,9 +242,7 @@ def downgrade() -> None:
     )
     op.drop_index(op.f("ix_event_schema_created_by"), table_name="event_schema")
     op.drop_constraint(None, "event", type_="foreignkey")
-    op.create_foreign_key(
-        op.f("event_tenant_id_fkey"), "event", "tenant", ["tenant_id"], ["id"]
-    )
+    op.create_foreign_key(op.f("event_tenant_id_fkey"), "event", "tenant", ["tenant_id"], ["id"])
     op.drop_index("ix_event_tenant_type_version", table_name="event")
     op.create_index(
         op.f("ix_event_type_version"),

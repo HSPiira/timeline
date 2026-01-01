@@ -1,4 +1,5 @@
 """Envelope encryption for OAuth credentials using KMS-like pattern"""
+
 from __future__ import annotations
 
 import base64
@@ -74,9 +75,7 @@ class EnvelopeEncryptor:
 
     def _sign_payload(self, payload: str) -> str:
         """Generate HMAC signature of payload"""
-        signature = hmac.new(
-            self._master_key, payload.encode(), hashlib.sha256
-        ).hexdigest()
+        signature = hmac.new(self._master_key, payload.encode(), hashlib.sha256).hexdigest()
         return signature
 
     def _verify_signature(self, payload: str, signature: str) -> bool:
@@ -233,9 +232,7 @@ class OAuthStateManager:
         Returns:
             Signed state: {state_id}:{signature}
         """
-        signature = hmac.new(
-            self._signing_key, state_id.encode(), hashlib.sha256
-        ).hexdigest()
+        signature = hmac.new(self._signing_key, state_id.encode(), hashlib.sha256).hexdigest()
         return f"{state_id}:{signature}"
 
     def verify_and_extract(self, signed_state: str) -> str:
@@ -258,9 +255,7 @@ class OAuthStateManager:
         state_id, signature = parts
 
         # Verify signature
-        expected = hmac.new(
-            self._signing_key, state_id.encode(), hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(self._signing_key, state_id.encode(), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(expected, signature):
             raise ValueError("Invalid state signature - possible CSRF attack")

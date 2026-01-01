@@ -1,11 +1,16 @@
 """Email provider factory for instantiating providers"""
+
 from typing import ClassVar
 
+from src.infrastructure.external.email.protocols import (EmailProviderConfig,
+                                                         IEmailProvider)
+from src.infrastructure.external.email.providers.gmail_provider import \
+    GmailProvider
+from src.infrastructure.external.email.providers.imap_provider import \
+    IMAPProvider
+from src.infrastructure.external.email.providers.outlook_provider import \
+    OutlookProvider
 from src.shared.telemetry.logging import get_logger
-from src.infrastructure.external.email.protocols import EmailProviderConfig, IEmailProvider
-from src.infrastructure.external.email.providers.gmail_provider import GmailProvider
-from src.infrastructure.external.email.providers.imap_provider import IMAPProvider
-from src.infrastructure.external.email.providers.outlook_provider import OutlookProvider
 
 logger = get_logger(__name__)
 
@@ -48,9 +53,7 @@ class EmailProviderFactory:
         return provider_class()
 
     @classmethod
-    def register_provider(
-        cls, provider_type: str, provider_class: type[IEmailProvider]
-    ) -> None:
+    def register_provider(cls, provider_type: str, provider_class: type[IEmailProvider]) -> None:
         """
         Register a custom email provider.
 

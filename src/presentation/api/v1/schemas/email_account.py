@@ -1,4 +1,5 @@
 """Pydantic schemas for email account management"""
+
 from datetime import datetime
 from typing import Any
 

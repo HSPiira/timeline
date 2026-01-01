@@ -1,6 +1,8 @@
 """Storage service factory for backend selection."""
+
 from src.application.interfaces.storage import IStorageService
-from src.infrastructure.external.storage.local_storage import LocalStorageService
+from src.infrastructure.external.storage.local_storage import \
+    LocalStorageService
 
 
 class StorageFactory:
@@ -29,7 +31,8 @@ class StorageFactory:
 
         elif backend == "s3":
             # Import here to avoid dependency if not using S3
-            from src.infrastructure.external.storage.s3_storage import S3StorageService
+            from src.infrastructure.external.storage.s3_storage import \
+                S3StorageService
 
             if not settings.s3_bucket:
                 raise ValueError("S3_BUCKET required for s3 backend")
@@ -43,6 +46,4 @@ class StorageFactory:
             )
 
         else:
-            raise ValueError(
-                f"Unknown storage backend: {backend}. " f"Supported: 'local', 's3'"
-            )
+            raise ValueError(f"Unknown storage backend: {backend}. " f"Supported: 'local', 's3'")

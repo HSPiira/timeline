@@ -1,4 +1,5 @@
 """Credential encryption utilities"""
+
 import base64
 import json
 
@@ -77,8 +78,6 @@ class CredentialEncryptor:
                 raise ValueError("Decrypted credentials must be a dictionary")
             return result
         except InvalidToken as e:
-            raise ValueError(
-                "Failed to decrypt credentials - invalid or corrupted data"
-            ) from e
+            raise ValueError("Failed to decrypt credentials - invalid or corrupted data") from e
         except json.JSONDecodeError as e:
             raise ValueError("Decrypted credentials are not valid JSON") from e

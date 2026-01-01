@@ -66,9 +66,7 @@ class EventRepository(BaseRepository[Event]):
         )
         return list(result.scalars().all())
 
-    async def get_by_tenant(
-        self, tenant_id: str, skip: int = 0, limit: int = 100
-    ) -> list[Event]:
+    async def get_by_tenant(self, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Event]:
         """Get all events for a tenant with pagination"""
         result = await self.db.execute(
             select(Event)

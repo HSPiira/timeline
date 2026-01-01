@@ -14,14 +14,13 @@ from src.shared.telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from src.application.interfaces.repositories import (
-        IEventRepository,
-        IEventSchemaRepository,
-        ISubjectRepository,
-    )
+        IEventRepository, IEventSchemaRepository, ISubjectRepository)
     from src.application.interfaces.services import IHashService
-    from src.application.use_cases.workflows.workflow_engine import WorkflowEngine
+    from src.application.use_cases.workflows.workflow_engine import \
+        WorkflowEngine
     from src.infrastructure.persistence.models.event import Event
-    from src.infrastructure.persistence.models.workflow import WorkflowExecution
+    from src.infrastructure.persistence.models.workflow import \
+        WorkflowExecution
     from src.presentation.api.v1.schemas.event import EventCreate
 
 logger = get_logger(__name__)
@@ -62,14 +61,10 @@ class EventService:
             ValueError: If subject doesn't exist or schema validation fails
         """
         # 1. Validate that subject exists and belongs to tenant
-        subject = await self.subject_repo.get_by_id_and_tenant(
-            event.subject_id, tenant_id
-        )
+        subject = await self.subject_repo.get_by_id_and_tenant(event.subject_id, tenant_id)
 
         if not subject:
-            raise ValueError(
-                f"Subject '{event.subject_id}' not found or does not belong to tenant"
-            )
+            raise ValueError(f"Subject '{event.subject_id}' not found or does not belong to tenant")
 
         # 2. Validate schema_version exists and validate payload against it
         if self.schema_repo:
@@ -84,7 +79,8 @@ class EventService:
         # 4. Validate temporal ordering (prevent tampering)
         if prev_event and event.event_time <= prev_event.event_time:
             raise ValueError(
-                f"Event time {event.event_time} must be after previous event time {prev_event.event_time}. "
+                f"Event time {event.event_time} must be after "
+                f"previous event time {prev_event.event_time}. "
                 f"This prevents tampering with the event chain."
             )
 
@@ -99,9 +95,7 @@ class EventService:
         )
 
         # 6. Create the event
-        created_event = await self.event_repo.create_event(
-            tenant_id, event, event_hash, prev_hash
-        )
+        created_event = await self.event_repo.create_event(tenant_id, event, event_hash, prev_hash)
 
         # 7. Trigger workflows if enabled
         if trigger_workflows:
@@ -109,9 +103,7 @@ class EventService:
 
         return created_event
 
-    async def _trigger_workflows(
-        self, event: Event, tenant_id: str
-    ) -> list[WorkflowExecution]:
+    async def _trigger_workflows(self, event: Event, tenant_id: str) -> list[WorkflowExecution]:
         """
         Trigger workflows for created event.
 
@@ -126,9 +118,7 @@ class EventService:
             return []
 
         try:
-            executions = await self.workflow_engine.process_event_triggers(
-                event, tenant_id
-            )
+            executions = await self.workflow_engine.process_event_triggers(event, tenant_id)
             if executions:
                 logger.info(
                     "Triggered %d workflow(s) for event %s (type: %s)",
@@ -158,9 +148,7 @@ class EventService:
             raise ValueError("Schema repository not configured")
 
         # Get the specific schema version
-        schema = await self.schema_repo.get_by_version(
-            tenant_id, event_type, schema_version
-        )
+        schema = await self.schema_repo.get_by_version(tenant_id, event_type, schema_version)
 
         if not schema:
             raise ValueError(
@@ -182,6 +170,4 @@ class EventService:
                 f"Payload validation failed against schema v{schema_version}: {e.message}"
             ) from e
         except jsonschema.SchemaError as e:
-            raise ValueError(
-                f"Invalid schema definition for v{schema_version}: {e.message}"
-            ) from e
+            raise ValueError(f"Invalid schema definition for v{schema_version}: {e.message}") from e

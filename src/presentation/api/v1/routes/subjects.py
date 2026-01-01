@@ -2,14 +2,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.presentation.api.dependencies import (
-    get_current_tenant,
-    get_subject_repo,
-    get_subject_repo_transactional,
-)
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.subject_repo import SubjectRepository
-from src.presentation.api.v1.schemas.subject import SubjectCreate, SubjectResponse, SubjectUpdate
+from src.infrastructure.persistence.repositories.subject_repo import \
+    SubjectRepository
+from src.presentation.api.dependencies import (get_current_tenant,
+                                               get_subject_repo,
+                                               get_subject_repo_transactional)
+from src.presentation.api.v1.schemas.subject import (SubjectCreate,
+                                                     SubjectResponse,
+                                                     SubjectUpdate)
 
 router = APIRouter()
 

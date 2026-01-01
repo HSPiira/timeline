@@ -8,6 +8,7 @@ Security Features:
 - File permissions (0o640 files, 0o750 dirs)
 - Idempotent operations
 """
+
 import hashlib
 import json
 import os
@@ -20,16 +21,14 @@ from typing import Any, BinaryIO
 import aiofiles
 import aiofiles.os
 
-from src.infrastructure.exceptions import (
-    StorageAlreadyExistsError,
-    StorageChecksumMismatchError,
-    StorageDeleteError,
-    StorageDownloadError,
-    StorageNotFoundError,
-    StorageNotSupportedError,
-    StoragePermissionError,
-    StorageUploadError,
-)
+from src.infrastructure.exceptions import (StorageAlreadyExistsError,
+                                           StorageChecksumMismatchError,
+                                           StorageDeleteError,
+                                           StorageDownloadError,
+                                           StorageNotFoundError,
+                                           StorageNotSupportedError,
+                                           StoragePermissionError,
+                                           StorageUploadError)
 
 
 class LocalStorageService:
@@ -81,9 +80,7 @@ class LocalStorageService:
         try:
             full_path.relative_to(self.storage_root)
         except ValueError as e:
-            raise StoragePermissionError(
-                f"Path traversal detected: {storage_ref}"
-            ) from e
+            raise StoragePermissionError(f"Path traversal detected: {storage_ref}") from e
 
         return full_path
 
@@ -386,9 +383,7 @@ class LocalStorageService:
 
         return {
             "size": stat.st_size,
-            "content_type": stored_metadata.get(
-                "content_type", "application/octet-stream"
-            ),
+            "content_type": stored_metadata.get("content_type", "application/octet-stream"),
             "checksum": stored_metadata.get("checksum"),
             "last_modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             "custom": stored_metadata.get("custom", {}),

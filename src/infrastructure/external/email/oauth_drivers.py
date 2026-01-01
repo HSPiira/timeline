@@ -1,4 +1,5 @@
 """OAuth provider driver abstraction with registry pattern"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -147,12 +148,8 @@ class OAuthDriver(ABC):
             )
 
             if response.status_code != 200:
-                logger.error(
-                    f"{self.provider_name} token exchange failed: {response.text}"
-                )
-                raise ValueError(
-                    f"Token exchange failed: {response.status_code} {response.text}"
-                )
+                logger.error(f"{self.provider_name} token exchange failed: {response.text}")
+                raise ValueError(f"Token exchange failed: {response.status_code} {response.text}")
 
             token_data = response.json()
             return self._normalize_token_response(token_data)
@@ -182,12 +179,8 @@ class OAuthDriver(ABC):
             )
 
             if response.status_code != 200:
-                logger.error(
-                    f"{self.provider_name} token refresh failed: {response.text}"
-                )
-                raise ValueError(
-                    f"Token refresh failed: {response.status_code} {response.text}"
-                )
+                logger.error(f"{self.provider_name} token refresh failed: {response.text}")
+                raise ValueError(f"Token refresh failed: {response.status_code} {response.text}")
 
             token_data = response.json()
             tokens = self._normalize_token_response(token_data)
@@ -261,9 +254,7 @@ class OutlookDriver(OAuthDriver):
 
     provider_name = "Microsoft 365"
     provider_type = "outlook"
-    authorization_endpoint = (
-        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-    )
+    authorization_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
     token_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
     def _get_authorization_params(self) -> dict[str, Any]:

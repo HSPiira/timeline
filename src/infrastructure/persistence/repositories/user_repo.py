@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.persistence.models.user import User
 from src.infrastructure.persistence.repositories.base import BaseRepository
-from src.infrastructure.security.password import get_password_hash, verify_password
+from src.infrastructure.security.password import (get_password_hash,
+                                                  verify_password)
 
 
 class UserRepository(BaseRepository[User]):
@@ -14,9 +15,7 @@ class UserRepository(BaseRepository[User]):
     def __init__(self, db: AsyncSession):
         super().__init__(db, User)
 
-    async def get_by_username_and_tenant(
-        self, username: str, tenant_id: str
-    ) -> User | None:
+    async def get_by_username_and_tenant(self, username: str, tenant_id: str) -> User | None:
         """Get user by username within a specific tenant"""
         result = await self.db.execute(
             select(User).where(User.username == username, User.tenant_id == tenant_id)
@@ -37,9 +36,7 @@ class UserRepository(BaseRepository[User]):
         )
         return result.scalar_one_or_none()
 
-    async def authenticate(
-        self, username: str, tenant_id: str, password: str
-    ) -> User | None:
+    async def authenticate(self, username: str, tenant_id: str, password: str) -> User | None:
         """
         Authenticate user by username, tenant, and password.
 
@@ -60,9 +57,7 @@ class UserRepository(BaseRepository[User]):
 
         return user
 
-    async def create_user(
-        self, tenant_id: str, username: str, email: str, password: str
-    ) -> User:
+    async def create_user(self, tenant_id: str, username: str, email: str, password: str) -> User:
         """Create a new user with hashed password"""
         hashed = await asyncio.to_thread(get_password_hash, password)
         user = User(

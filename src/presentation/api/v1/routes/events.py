@@ -3,19 +3,20 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.params import Query
 
-from src.presentation.api.dependencies import (
-    get_current_tenant,
-    get_event_repo,
-    get_event_service_transactional,
-    require_permission,
-)
-from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.event_repo import EventRepository
-from src.presentation.api.v1.schemas.event import EventCreate, EventResponse
-from src.presentation.api.v1.schemas.verification import ChainVerificationResponse, EventVerificationResult
-from src.application.use_cases.events.create_event import EventService
 from src.application.services.hash_service import HashService
-from src.application.services.verification_service import ChainVerificationResult, VerificationService
+from src.application.services.verification_service import (
+    ChainVerificationResult, VerificationService)
+from src.application.use_cases.events.create_event import EventService
+from src.infrastructure.persistence.models.tenant import Tenant
+from src.infrastructure.persistence.repositories.event_repo import \
+    EventRepository
+from src.presentation.api.dependencies import (get_current_tenant,
+                                               get_event_repo,
+                                               get_event_service_transactional,
+                                               require_permission)
+from src.presentation.api.v1.schemas.event import EventCreate, EventResponse
+from src.presentation.api.v1.schemas.verification import (
+    ChainVerificationResponse, EventVerificationResult)
 
 router = APIRouter()
 
@@ -65,9 +66,7 @@ async def get_subject_timeline(
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
-    limit: Annotated[
-        int, Query(ge=1, le=1000, description="Max records to return")
-    ] = 100,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max records to return")] = 100,
 ):
     """Get all events for a subject (timeline)"""
     events = await repo.get_by_subject(subject_id, tenant.id, skip, limit)
@@ -92,9 +91,7 @@ async def list_events(
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
-    limit: Annotated[
-        int, Query(ge=1, le=1000, description="Max records to return")
-    ] = 100,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max records to return")] = 100,
     event_type: Annotated[
         str | None,
         Query(
@@ -118,9 +115,7 @@ async def list_events(
 async def verify_tenant_chains(
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
-    limit: Annotated[
-        int, Query(ge=1, le=10000, description="Max events to verify")
-    ] = 1000,
+    limit: Annotated[int, Query(ge=1, le=10000, description="Max events to verify")] = 1000,
 ):
     """
     Verify cryptographic integrity of all event chains for current tenant.
@@ -130,9 +125,7 @@ async def verify_tenant_chains(
 
     Returns aggregated verification report.
     """
-    verification_service = VerificationService(
-        event_repo=repo, hash_service=HashService()
-    )
+    verification_service = VerificationService(event_repo=repo, hash_service=HashService())
 
     result = await verification_service.verify_tenant_chains(tenant.id, limit=limit)
     return _to_verification_response(result)
@@ -158,9 +151,7 @@ async def verify_subject_chain(
 
     Returns detailed verification report with per-event status.
     """
-    verification_service = VerificationService(
-        event_repo=repo, hash_service=HashService()
-    )
+    verification_service = VerificationService(event_repo=repo, hash_service=HashService())
 
     result = await verification_service.verify_subject_chain(subject_id, tenant.id)
     return _to_verification_response(result)

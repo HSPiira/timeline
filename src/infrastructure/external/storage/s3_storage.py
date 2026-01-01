@@ -14,6 +14,7 @@ Compatible with:
 - DigitalOcean Spaces
 - Any S3-compatible storage
 """
+
 import hashlib
 from collections.abc import AsyncIterator
 from datetime import timedelta
@@ -22,14 +23,12 @@ from typing import Any, BinaryIO
 import aioboto3
 from botocore.exceptions import ClientError
 
-from src.infrastructure.exceptions import (
-    StorageAlreadyExistsError,
-    StorageChecksumMismatchError,
-    StorageDeleteError,
-    StorageDownloadError,
-    StorageNotFoundError,
-    StorageUploadError,
-)
+from src.infrastructure.exceptions import (StorageAlreadyExistsError,
+                                           StorageChecksumMismatchError,
+                                           StorageDeleteError,
+                                           StorageDownloadError,
+                                           StorageNotFoundError,
+                                           StorageUploadError)
 
 
 class S3StorageService:
@@ -364,9 +363,7 @@ class S3StorageService:
                     await s3.head_object(Bucket=self.bucket, Key=storage_ref)
                 except ClientError as e:
                     if e.response["Error"]["Code"] == "404":
-                        raise StorageNotFoundError(
-                            f"Object not found: {storage_ref}"
-                        ) from e
+                        raise StorageNotFoundError(f"Object not found: {storage_ref}") from e
                     raise
 
                 # Generate pre-signed URL

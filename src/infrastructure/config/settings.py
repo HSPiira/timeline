@@ -65,17 +65,11 @@ class Settings(BaseSettings):
         """Validate storage backend and required configuration"""
         # Validate required fields are loaded from environment
         if not self.database_url:
-            raise ValueError(
-                "DATABASE_URL is required. Set in environment or .env file."
-            )
+            raise ValueError("DATABASE_URL is required. Set in environment or .env file.")
         if not self.secret_key:
-            raise ValueError(
-                "SECRET_KEY is required. Generate with: openssl rand -hex 32"
-            )
+            raise ValueError("SECRET_KEY is required. Generate with: openssl rand -hex 32")
         if not self.encryption_salt:
-            raise ValueError(
-                "ENCRYPTION_SALT is required. Generate with: openssl rand -hex 16"
-            )
+            raise ValueError("ENCRYPTION_SALT is required. Generate with: openssl rand -hex 16")
 
         # Validate storage backend
         if self.storage_backend == "s3":

@@ -1,4 +1,5 @@
 """Repository for OAuth provider configuration"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -8,10 +9,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.persistence.models.oauth_provider_config import (
-    OAuthAuditLog,
-    OAuthProviderConfig,
-    OAuthState,
-)
+    OAuthAuditLog, OAuthProviderConfig, OAuthState)
 from src.infrastructure.persistence.repositories.base import BaseRepository
 from src.shared.utils.generators import generate_cuid
 
@@ -74,9 +72,7 @@ class OAuthProviderConfigRepository(BaseRepository[OAuthProviderConfig]):
         query = (
             query.offset(skip)
             .limit(limit)
-            .order_by(
-                OAuthProviderConfig.provider_type, OAuthProviderConfig.version.desc()
-            )
+            .order_by(OAuthProviderConfig.provider_type, OAuthProviderConfig.version.desc())
         )
 
         result = await self.db.execute(query)
@@ -177,8 +173,7 @@ class OAuthProviderConfigRepository(BaseRepository[OAuthProviderConfig]):
         # Check rate limit
         if (
             config.rate_limit_connections_per_hour
-            and config.current_hour_connections
-            >= config.rate_limit_connections_per_hour
+            and config.current_hour_connections >= config.rate_limit_connections_per_hour
         ):
             return False
 
@@ -267,9 +262,7 @@ class OAuthStateRepository:
 
     async def get_state(self, state_id: str) -> OAuthState | None:
         """Get OAuth state by ID"""
-        result = await self.db.execute(
-            select(OAuthState).where(OAuthState.id == state_id)
-        )
+        result = await self.db.execute(select(OAuthState).where(OAuthState.id == state_id))
         return result.scalar_one_or_none()
 
     async def consume_state(self, state_id: str) -> OAuthState | None:

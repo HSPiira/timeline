@@ -16,7 +16,8 @@ from src.application.services.hash_service import HashService
 
 if TYPE_CHECKING:
     from src.infrastructure.persistence.models.event import Event
-    from src.infrastructure.persistence.repositories.event_repo import EventRepository
+    from src.infrastructure.persistence.repositories.event_repo import \
+        EventRepository
 
 
 class VerificationResult:
@@ -185,9 +186,7 @@ class VerificationService:
         # Verify each subject's chain
         for _, subject_events in events_by_subject.items():
             for i, event in enumerate(subject_events):
-                result = self._verify_event(
-                    event, subject_events[i - 1] if i > 0 else None, i
-                )
+                result = self._verify_event(event, subject_events[i - 1] if i > 0 else None, i)
                 all_results.append(result)
 
                 if result.is_valid:
@@ -260,7 +259,10 @@ class VerificationService:
                     sequence=sequence,
                     is_valid=False,
                     error_type="GENESIS_ERROR",
-                    error_message=f"Genesis event should have null previous_hash, got: {event.previous_hash}",
+                    error_message=(
+                        f"Genesis event should have null previous_hash, got: "
+                        f"{event.previous_hash}"
+                        ),
                     expected_hash=None,
                     actual_hash=event.previous_hash,
                 )
@@ -287,7 +289,10 @@ class VerificationService:
                     sequence=sequence,
                     is_valid=False,
                     error_type="CHAIN_BREAK",
-                    error_message="Chain broken: previous_hash does not match previous event's hash",
+                    error_message=(
+                        "Chain broken: previous_hash "
+                        "does not match previous event's hash"
+                    ),
                     expected_hash=previous_event.hash,
                     actual_hash=event.previous_hash,
                 )

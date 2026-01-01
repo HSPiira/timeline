@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import (DateTime, ForeignKey, Index, String, Text,
+                        UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -31,9 +32,7 @@ class Permission(CuidMixin, TenantMixin, Base):
     action: Mapped[str] = mapped_column(
         String, nullable=False, index=True
     )  # e.g., 'create', 'read', 'update', 'delete'
-    description: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # Optional description
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)  # Optional description
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "code", name="uq_permission_tenant_code"),
@@ -90,9 +89,7 @@ class UserRole(CuidMixin, TenantMixin, Base):
     assigned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("user_id", "role_id", name="uq_user_role"),

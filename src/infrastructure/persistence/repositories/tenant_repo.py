@@ -3,11 +3,11 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.enums import TenantStatus
 from src.infrastructure.cache.redis_cache import CacheService
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.persistence.models.tenant import Tenant
 from src.infrastructure.persistence.repositories.base import BaseRepository
-from src.domain.enums import TenantStatus
 
 
 class TenantRepository(BaseRepository[Tenant]):
@@ -45,18 +45,14 @@ class TenantRepository(BaseRepository[Tenant]):
         tenant = await super().get_by_id(tenant_id)
 
         # Cache for future requests
-        if tenant and self.cache and  self.cache.is_available():
+        if tenant and self.cache and self.cache.is_available():
             tenant_dict = {
                 "id": tenant.id,
                 "code": tenant.code,
                 "name": tenant.name,
                 "status": tenant.status,
-                "created_at": tenant.created_at.isoformat()
-                if tenant.created_at
-                else None,
-                "updated_at": tenant.updated_at.isoformat()
-                if tenant.updated_at
-                else None,
+                "created_at": tenant.created_at.isoformat() if tenant.created_at else None,
+                "updated_at": tenant.updated_at.isoformat() if tenant.updated_at else None,
             }
             await self.cache.set(cache_key, tenant_dict, ttl=self.cache_ttl)
 
@@ -90,18 +86,12 @@ class TenantRepository(BaseRepository[Tenant]):
                 "code": tenant.code,
                 "name": tenant.name,
                 "status": tenant.status,
-                "created_at": tenant.created_at.isoformat()
-                if tenant.created_at
-                else None,
-                "updated_at": tenant.updated_at.isoformat()
-                if tenant.updated_at
-                else None,
+                "created_at": tenant.created_at.isoformat() if tenant.created_at else None,
+                "updated_at": tenant.updated_at.isoformat() if tenant.updated_at else None,
             }
             # Cache by both ID and code for maximum cache hit rate
             await self.cache.set(cache_key, tenant_dict, ttl=self.cache_ttl)
-            await self.cache.set(
-                f"tenant:id:{tenant.id}", tenant_dict, ttl=self.cache_ttl
-            )
+            await self.cache.set(f"tenant:id:{tenant.id}", tenant_dict, ttl=self.cache_ttl)
 
         return tenant
 
@@ -115,9 +105,7 @@ class TenantRepository(BaseRepository[Tenant]):
         )
         return list(result.scalars().all())
 
-    async def update_status(
-        self, tenant_id: str, status: TenantStatus
-    ) -> Tenant | None:
+    async def update_status(self, tenant_id: str, status: TenantStatus) -> Tenant | None:
         """Update tenant status and invalidate cache"""
         tenant = await self.get_by_id(tenant_id)
         if tenant:

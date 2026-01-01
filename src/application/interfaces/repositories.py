@@ -53,15 +53,11 @@ class ISubjectRepository(Protocol):
         """Get subject by ID"""
         ...
 
-    async def get_by_id_and_tenant(
-        self, subject_id: str, tenant_id: str
-    ) -> Subject | None:
+    async def get_by_id_and_tenant(self, subject_id: str, tenant_id: str) -> Subject | None:
         """Get subject by ID and verify it belongs to the tenant"""
         ...
 
-    async def get_by_tenant(
-        self, tenant_id: str, skip: int = 0, limit: int = 100
-    ) -> list[Subject]:
+    async def get_by_tenant(self, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Subject]:
         """Get all subjects for a tenant with pagination"""
         ...
 
@@ -71,9 +67,7 @@ class ISubjectRepository(Protocol):
         """Get all subjects of a specific type for a tenant"""
         ...
 
-    async def get_by_external_ref(
-        self, tenant_id: str, external_ref: str
-    ) -> Subject | None:
+    async def get_by_external_ref(self, tenant_id: str, external_ref: str) -> Subject | None:
         """Get subject by external reference"""
         ...
 
@@ -91,15 +85,11 @@ class IEventSchemaRepository(Protocol):
         """Get specific schema version"""
         ...
 
-    async def get_active_schema(
-        self, tenant_id: str, event_type: str
-    ) -> EventSchema | None:
+    async def get_active_schema(self, tenant_id: str, event_type: str) -> EventSchema | None:
         """Get active schema for event type and tenant"""
         ...
 
-    async def get_all_for_event_type(
-        self, tenant_id: str, event_type: str
-    ) -> list[EventSchema]:
+    async def get_all_for_event_type(self, tenant_id: str, event_type: str) -> list[EventSchema]:
         """Get all schema versions for event type"""
         ...
 

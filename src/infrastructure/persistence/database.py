@@ -1,4 +1,5 @@
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
 from sqlalchemy.orm import DeclarativeBase
 
 from src.infrastructure.config.settings import get_settings
@@ -14,12 +15,14 @@ engine = create_async_engine(
     max_overflow=30,
     pool_recycle=3600,
     query_cache_size=1200,
-    connect_args={
-        "server_settings": {"jit": "off"},
-        "command_timeout": 60,
-    }
-    if "postgresql" in settings.database_url
-    else {},
+    connect_args=(
+        {
+            "server_settings": {"jit": "off"},
+            "command_timeout": 60,
+        }
+        if "postgresql" in settings.database_url
+        else {}
+    ),
 )
 
 AsyncSessionLocal = async_sessionmaker(

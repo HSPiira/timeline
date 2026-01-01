@@ -44,10 +44,7 @@ class AuthorizationService:
         Uses Redis cache to avoid repeated queries (5 min TTL)
         """
         from src.infrastructure.persistence.models.permission import (
-            Permission,
-            RolePermission,
-            UserRole,
-        )
+            Permission, RolePermission, UserRole)
         from src.infrastructure.persistence.models.role import Role
 
         # Try cache first
@@ -110,14 +107,10 @@ class AuthorizationService:
         self, user_id: str, tenant_id: str, resource: str, action: str
     ) -> None:
         """Raise exception if user lacks permission"""
-        has_permission = await self.check_permission(
-            user_id, tenant_id, resource, action
-        )
+        has_permission = await self.check_permission(user_id, tenant_id, resource, action)
 
         if not has_permission:
-            raise PermissionDeniedError(
-                f"User {user_id} lacks permission {resource}:{action}"
-            )
+            raise PermissionDeniedError(f"User {user_id} lacks permission {resource}:{action}")
 
     async def invalidate_user_cache(self, user_id: str, tenant_id: str) -> None:
         """

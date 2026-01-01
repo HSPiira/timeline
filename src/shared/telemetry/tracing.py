@@ -1,4 +1,5 @@
 """Utility functions and decorators for distributed tracing"""
+
 import logging
 from collections.abc import Callable
 from functools import wraps

@@ -1,4 +1,5 @@
 """Logging configuration for Timeline application"""
+
 import logging
 import sys
 

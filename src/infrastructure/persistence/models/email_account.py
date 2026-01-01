@@ -1,4 +1,5 @@
 """Email account model for integration metadata (NOT a core Timeline model)"""
+
 from datetime import datetime
 from typing import Any
 
@@ -39,9 +40,7 @@ class EmailAccount(MultiTenantModel, Base):
     credentials_encrypted: Mapped[str] = mapped_column(String, nullable=False)
 
     # Provider-specific connection parameters (IMAP server, ports, etc.)
-    connection_params: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON, nullable=True
-    )
+    connection_params: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # OAuth integration tracking (for OAuth providers)
     oauth_provider_config_id: Mapped[str | None] = mapped_column(
@@ -73,15 +72,15 @@ class EmailAccount(MultiTenantModel, Base):
     )  # Exponential backoff
 
     # Token health monitoring (prevents re-authentication issues)
-    token_last_refreshed_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
-    )
+    token_last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     token_refresh_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    token_refresh_failures: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
+    token_refresh_failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_auth_error: Mapped[str | None] = mapped_column(String, nullable=True)
     last_auth_error_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
-        return f"<EmailAccount(id={self.id}, email={self.email_address}, provider={self.provider_type})>"
+        return (
+            f"<EmailAccount(id={self.id}, "
+            f"email={self.email_address}, "
+            f"provider={self.provider_type})>"
+        )

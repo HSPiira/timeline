@@ -1,4 +1,5 @@
 """OAuth provider configuration and authorization API"""
+
 from __future__ import annotations
 
 import secrets
@@ -7,33 +8,24 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.presentation.api.dependencies import get_current_user
-from src.infrastructure.persistence.database import get_db
-from src.shared.telemetry.logging import get_logger
-from src.infrastructure.persistence.models.oauth_provider_config import EnvelopeEncryptor, OAuthStateManager
 from src.infrastructure.external.email.oauth_drivers import OAuthDriverRegistry
+from src.infrastructure.persistence.database import get_db
 from src.infrastructure.persistence.models.email_account import EmailAccount
+from src.infrastructure.persistence.models.oauth_provider_config import (
+    EnvelopeEncryptor, OAuthStateManager)
 from src.infrastructure.persistence.models.subject import Subject
 from src.infrastructure.persistence.repositories.oauth_provider_config_repo import (
-    OAuthAuditLogRepository,
-    OAuthProviderConfigRepository,
-    OAuthStateRepository,
-)
+    OAuthAuditLogRepository, OAuthProviderConfigRepository,
+    OAuthStateRepository)
+from src.presentation.api.dependencies import get_current_user
 from src.presentation.api.v1.schemas.oauth_provider import (
-    OAuthAuditLogResponse,
-    OAuthAuthorizeRequest,
-    OAuthAuthorizeResponse,
-    OAuthCallbackResponse,
-    OAuthProviderConfigCreate,
-    OAuthProviderConfigResponse,
-    OAuthProviderConfigUpdate,
-    OAuthProviderHealthCheck,
-    OAuthProviderListResponse,
-    OAuthProviderMetadata,
-    OAuthRotateCredentialsRequest,
-    OAuthRotateCredentialsResponse,
-)
+    OAuthAuditLogResponse, OAuthAuthorizeRequest, OAuthAuthorizeResponse,
+    OAuthCallbackResponse, OAuthProviderConfigCreate,
+    OAuthProviderConfigResponse, OAuthProviderConfigUpdate,
+    OAuthProviderHealthCheck, OAuthProviderListResponse, OAuthProviderMetadata,
+    OAuthRotateCredentialsRequest, OAuthRotateCredentialsResponse)
 from src.presentation.api.v1.schemas.token import TokenPayload
+from src.shared.telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/oauth-providers", tags=["OAuth Providers"])
@@ -51,9 +43,7 @@ async def require_admin(current_user: TokenPayload = Depends(get_current_user)):
 # Provider Configuration Management
 
 
-@router.post(
-    "", response_model=OAuthProviderConfigResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=OAuthProviderConfigResponse, status_code=status.HTTP_201_CREATED)
 async def create_provider_config(
     data: OAuthProviderConfigCreate,
     current_user: TokenPayload = Depends(require_admin),

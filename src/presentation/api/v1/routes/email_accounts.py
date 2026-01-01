@@ -1,44 +1,38 @@
 """Email account API endpoints"""
+
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
+                     Request, status)
 from fastapi.params import Query
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.presentation.api.dependencies import (
-    get_current_tenant,
-    get_db,
-    get_db_transactional,
-    get_event_service_transactional,
-)
-from src.shared.telemetry.logging import get_logger
+from src.application.use_cases.events.create_event import EventService
 from src.infrastructure.external.email.encryption import CredentialEncryptor
-from src.infrastructure.external.email.sync import AuthenticationError, UniversalEmailSync
+from src.infrastructure.external.email.sync import (AuthenticationError,
+                                                    UniversalEmailSync)
 from src.infrastructure.persistence.models.email_account import EmailAccount
 from src.infrastructure.persistence.models.subject import Subject
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.subject_repo import SubjectRepository
+from src.infrastructure.persistence.repositories.subject_repo import \
+    SubjectRepository
+from src.presentation.api.dependencies import (get_current_tenant, get_db,
+                                               get_db_transactional,
+                                               get_event_service_transactional)
 from src.presentation.api.v1.schemas.email_account import (
-    EmailAccountCreate,
-    EmailAccountResponse,
-    EmailAccountUpdate,
-    EmailSyncRequest,
-    EmailSyncResponse,
-    WebhookSetupRequest,
-)
-from src.application.use_cases.events.create_event import EventService
+    EmailAccountCreate, EmailAccountResponse, EmailAccountUpdate,
+    EmailSyncRequest, EmailSyncResponse, WebhookSetupRequest)
+from src.shared.telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 
-@router.post(
-    "/", response_model=EmailAccountResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=EmailAccountResponse, status_code=status.HTTP_201_CREATED)
 async def create_email_account(
     data: EmailAccountCreate,
     db: Annotated[AsyncSession, Depends(get_db_transactional)],
@@ -98,16 +92,11 @@ async def list_email_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
-    limit: Annotated[
-        int, Query(ge=1, le=1000, description="Max records to return")
-    ] = 100,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max records to return")] = 100,
 ):
     """List all email accounts for the tenant"""
     result = await db.execute(
-        select(EmailAccount)
-        .where(EmailAccount.tenant_id == tenant.id)
-        .offset(skip)
-        .limit(limit)
+        select(EmailAccount).where(EmailAccount.tenant_id == tenant.id).offset(skip).limit(limit)
     )
     accounts = result.scalars().all()
     return [EmailAccountResponse.model_validate(acc) for acc in accounts]
@@ -128,9 +117,7 @@ async def get_email_account(
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found")
 
     return EmailAccountResponse.model_validate(account)
 
@@ -151,9 +138,7 @@ async def update_email_account(
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found")
 
     # Update fields
     if data.credentials is not None:
@@ -187,9 +172,7 @@ async def delete_email_account(
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found")
 
     account.is_active = False
 
@@ -213,9 +196,7 @@ async def sync_email_account(
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found")
 
     if not account.is_active:
         raise HTTPException(
@@ -227,14 +208,10 @@ async def sync_email_account(
     sync_service = UniversalEmailSync(db, event_service)
 
     try:
-        stats = await sync_service.sync_account(
-            account, incremental=sync_request.incremental
-        )
+        stats = await sync_service.sync_account(account, incremental=sync_request.incremental)
         return EmailSyncResponse(**stats)
     except AuthenticationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from e
 
 
 @router.post("/{account_id}/sync-background", status_code=status.HTTP_202_ACCEPTED)
@@ -262,9 +239,7 @@ async def sync_email_account_background(
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found")
 
     if not account.is_active:
         raise HTTPException(
@@ -289,19 +264,19 @@ async def sync_email_account_background(
     }
 
 
-async def _run_email_sync_background(
-    account_id: str, tenant_id: str, incremental: bool = True
-):
+async def _run_email_sync_background(account_id: str, tenant_id: str, incremental: bool = True):
     """
     Background task to run email sync.
 
     This runs asynchronously after the HTTP response is sent.
     """
     # Create new DB session for background task
-    from src.infrastructure.persistence.database import AsyncSessionLocal
-    from src.infrastructure.persistence.repositories.event_repo import EventRepository
-    from src.infrastructure.persistence.repositories.event_schema_repo import EventSchemaRepository
     from src.application.services.hash_service import HashService
+    from src.infrastructure.persistence.database import AsyncSessionLocal
+    from src.infrastructure.persistence.repositories.event_repo import \
+        EventRepository
+    from src.infrastructure.persistence.repositories.event_schema_repo import \
+        EventSchemaRepository
 
     async with AsyncSessionLocal() as db:
         try:
@@ -324,9 +299,7 @@ async def _run_email_sync_background(
             schema_repo = EventSchemaRepository(db)
             hash_service = HashService()
             subject_repo = SubjectRepository(db)
-            event_service = EventService(
-                event_repo, hash_service, subject_repo, schema_repo
-            )
+            event_service = EventService(event_repo, hash_service, subject_repo, schema_repo)
 
             # Run sync
             sync_service = UniversalEmailSync(db, event_service)
@@ -334,18 +307,15 @@ async def _run_email_sync_background(
 
             logger.info(
                 f"Background sync completed for {account.email_address}: "
-                f"{stats['events_created']} events created from {stats['messages_fetched']} messages"
+                f"{stats['events_created']} events created from "
+                f"{stats['messages_fetched']} messages"
             )
 
         except AuthenticationError as e:
-            logger.error(
-                f"Authentication failed for account {account_id}: {e}", exc_info=True
-            )
+            logger.error(f"Authentication failed for account {account_id}: {e}", exc_info=True)
             # Could notify user via webhook or email that re-authentication is needed
         except Exception as e:
-            logger.error(
-                f"Background sync failed for account {account_id}: {e}", exc_info=True
-            )
+            logger.error(f"Background sync failed for account {account_id}: {e}", exc_info=True)
 
 
 @router.post("/{account_id}/webhook", response_model=dict)
@@ -365,28 +335,20 @@ async def setup_webhook(
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found")
 
     # Setup webhook
     sync_service = UniversalEmailSync(db, event_service)
 
     try:
-        webhook_config = await sync_service.setup_webhook(
-            account, webhook_request.callback_url
-        )
+        webhook_config = await sync_service.setup_webhook(account, webhook_request.callback_url)
 
         # Store webhook ID
-        account.webhook_id = webhook_config.get("id") or webhook_config.get(
-            "subscriptionId"
-        )
+        account.webhook_id = webhook_config.get("id") or webhook_config.get("subscriptionId")
         if not account.webhook_id:
             logger.warning(f"Webhook setup response missing ID: {webhook_config}")
 
         return webhook_config
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

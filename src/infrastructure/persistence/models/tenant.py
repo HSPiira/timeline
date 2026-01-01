@@ -3,7 +3,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.domain.enums import TenantStatus
 from src.infrastructure.persistence.database import Base
-from src.infrastructure.persistence.models.mixins import CuidMixin, TimestampMixin
+from src.infrastructure.persistence.models.mixins import (CuidMixin,
+                                                          TimestampMixin)
 
 
 class Tenant(CuidMixin, TimestampMixin, Base):
@@ -24,7 +25,5 @@ class Tenant(CuidMixin, TimestampMixin, Base):
     )
 
     __table_args__ = (
-        CheckConstraint(
-            f"status IN {tuple(TenantStatus.values())}", name="tenant_status_check"
-        ),
+        CheckConstraint(f"status IN {tuple(TenantStatus.values())}", name="tenant_status_check"),
     )

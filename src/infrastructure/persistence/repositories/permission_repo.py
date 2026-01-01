@@ -3,11 +3,9 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.persistence.models.permission import (
-    Permission,
-    RolePermission,
-    UserRole,
-)
+from src.infrastructure.persistence.models.permission import (Permission,
+                                                              RolePermission,
+                                                              UserRole)
 from src.infrastructure.persistence.repositories.base import BaseRepository
 
 
@@ -17,14 +15,10 @@ class PermissionRepository(BaseRepository[Permission]):
     def __init__(self, db: AsyncSession):
         super().__init__(db, Permission)
 
-    async def get_by_code_and_tenant(
-        self, code: str, tenant_id: str
-    ) -> Permission | None:
+    async def get_by_code_and_tenant(self, code: str, tenant_id: str) -> Permission | None:
         """Get permission by code within a specific tenant"""
         result = await self.db.execute(
-            select(Permission).where(
-                Permission.code == code, Permission.tenant_id == tenant_id
-            )
+            select(Permission).where(Permission.code == code, Permission.tenant_id == tenant_id)
         )
         return result.scalar_one_or_none()
 
@@ -50,16 +44,12 @@ class PermissionRepository(BaseRepository[Permission]):
         )
         return list(result.scalars().all())
 
-    async def get_permissions_for_role(
-        self, role_id: str, tenant_id: str
-    ) -> list[Permission]:
+    async def get_permissions_for_role(self, role_id: str, tenant_id: str) -> list[Permission]:
         """Get all permissions assigned to a role"""
         result = await self.db.execute(
             select(Permission)
             .join(RolePermission, RolePermission.permission_id == Permission.id)
-            .where(
-                RolePermission.role_id == role_id, RolePermission.tenant_id == tenant_id
-            )
+            .where(RolePermission.role_id == role_id, RolePermission.tenant_id == tenant_id)
         )
         return list(result.scalars().all())
 
@@ -75,9 +65,7 @@ class PermissionRepository(BaseRepository[Permission]):
         await self.db.refresh(role_permission)
         return role_permission
 
-    async def remove_permission_from_role(
-        self, role_id: str, permission_id: str
-    ) -> bool:
+    async def remove_permission_from_role(self, role_id: str, permission_id: str) -> bool:
         """Remove a permission from a role"""
         result = await self.db.execute(
             select(RolePermission).where(
@@ -116,9 +104,7 @@ class PermissionRepository(BaseRepository[Permission]):
     async def remove_role_from_user(self, user_id: str, role_id: str) -> bool:
         """Remove a role from a user"""
         result = await self.db.execute(
-            select(UserRole).where(
-                UserRole.user_id == user_id, UserRole.role_id == role_id
-            )
+            select(UserRole).where(UserRole.user_id == user_id, UserRole.role_id == role_id)
         )
         user_role = result.scalar_one_or_none()
 

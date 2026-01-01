@@ -7,25 +7,16 @@ and domain exceptions. It has no dependencies on other layers.
 
 from src.domain.entities import EventEntity, TenantEntity
 from src.domain.enums import TenantStatus
-from src.domain.exceptions import (
-    AuthenticationException,
-    AuthorizationException,
-    EventChainBrokenException,
-    PermissionDeniedError,
-    ResourceNotFoundException,
-    SchemaValidationException,
-    TenantNotFoundException,
-    TimelineException,
-    ValidationException,
-)
-from src.domain.value_objects import (
-    EventChain,
-    EventType,
-    Hash,
-    SubjectId,
-    TenantCode,
-    TenantId,
-)
+from src.domain.exceptions import (AuthenticationException,
+                                   AuthorizationException,
+                                   EventChainBrokenException,
+                                   PermissionDeniedError,
+                                   ResourceNotFoundException,
+                                   SchemaValidationException,
+                                   TenantNotFoundException, TimelineException,
+                                   ValidationException)
+from src.domain.value_objects import (EventChain, EventType, Hash, SubjectId,
+                                      TenantCode, TenantId)
 
 __all__ = [
     # Entities

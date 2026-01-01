@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from src.domain.value_objects.core import EventChain, EventType, SubjectId, TenantId
+from src.domain.value_objects.core import (EventChain, EventType, SubjectId,
+                                           TenantId)
 
 
 @dataclass
@@ -36,9 +37,7 @@ class EventEntity:
 
         now = datetime.now(UTC)
         event_time = (
-            self.event_time
-            if self.event_time.tzinfo
-            else self.event_time.replace(tzinfo=UTC)
+            self.event_time if self.event_time.tzinfo else self.event_time.replace(tzinfo=UTC)
         )
         if event_time > now:
             raise ValueError("Event time cannot be in the future")

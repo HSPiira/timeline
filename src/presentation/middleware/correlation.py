@@ -1,4 +1,5 @@
 """Correlation ID middleware for request tracing"""
+
 import uuid
 from contextvars import ContextVar
 

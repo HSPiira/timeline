@@ -4,20 +4,22 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.presentation.api.dependencies import get_current_tenant, get_current_user
-from src.infrastructure.persistence.database import get_db, get_db_transactional
+from src.infrastructure.persistence.database import (get_db,
+                                                     get_db_transactional)
 from src.infrastructure.persistence.models.permission import Permission
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.permission_repo import PermissionRepository
-from src.presentation.api.v1.schemas.role import PermissionCreate, PermissionResponse
+from src.infrastructure.persistence.repositories.permission_repo import \
+    PermissionRepository
+from src.presentation.api.dependencies import (get_current_tenant,
+                                               get_current_user)
+from src.presentation.api.v1.schemas.role import (PermissionCreate,
+                                                  PermissionResponse)
 from src.presentation.api.v1.schemas.token import TokenPayload
 
 router = APIRouter()
 
 
-@router.post(
-    "/", response_model=PermissionResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=PermissionResponse, status_code=status.HTTP_201_CREATED)
 async def create_permission(
     data: PermissionCreate,
     current_user: Annotated[TokenPayload, Depends(get_current_user)],
@@ -68,9 +70,7 @@ async def list_permissions(
     if resource:
         permissions = await perm_repo.get_by_resource(current_tenant.id, resource)
     else:
-        permissions = await perm_repo.get_by_tenant(
-            current_tenant.id, skip=skip, limit=limit
-        )
+        permissions = await perm_repo.get_by_tenant(current_tenant.id, skip=skip, limit=limit)
 
     return [PermissionResponse.model_validate(perm) for perm in permissions]
 
@@ -87,9 +87,7 @@ async def get_permission(
 
     permission = await perm_repo.get_by_id(permission_id)
     if not permission or permission.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found")
 
     return PermissionResponse.model_validate(permission)
 
@@ -106,9 +104,7 @@ async def delete_permission(
 
     permission = await perm_repo.get_by_id(permission_id)
     if not permission or permission.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found")
 
     # Note: This will cascade delete all role_permission associations
     await perm_repo.delete(permission)

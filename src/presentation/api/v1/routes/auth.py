@@ -6,13 +6,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.security.jwt import create_access_token
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.persistence.database import get_db
-from src.presentation.middleware.rate_limit import limiter
-from src.infrastructure.persistence.repositories.tenant_repo import TenantRepository
-from src.infrastructure.persistence.repositories.user_repo import UserRepository
+from src.infrastructure.persistence.repositories.tenant_repo import \
+    TenantRepository
+from src.infrastructure.persistence.repositories.user_repo import \
+    UserRepository
+from src.infrastructure.security.jwt import create_access_token
 from src.presentation.api.v1.schemas.token import Token, TokenRequest
+from src.presentation.middleware.rate_limit import limiter
 
 router = APIRouter()
 settings = get_settings()
@@ -44,9 +46,7 @@ async def login(
 
     if not tenant or tenant.status != "active":
         # Use generic error to prevent tenant enumeration
-        logger.warning(
-            f"Login attempt for invalid/inactive tenant: {token_request.tenant_code}"
-        )
+        logger.warning(f"Login attempt for invalid/inactive tenant: {token_request.tenant_code}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",

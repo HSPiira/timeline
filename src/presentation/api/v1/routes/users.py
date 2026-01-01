@@ -4,26 +4,24 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.params import Query
 from sqlalchemy.exc import IntegrityError
 
-from src.presentation.api.dependencies import (
-    get_current_tenant,
-    get_current_user,
-    get_tenant_repo,
-    get_user_repo,
-    get_user_repo_transactional,
-)
-from src.infrastructure.security.password import get_password_hash
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.tenant_repo import TenantRepository
-from src.infrastructure.persistence.repositories.user_repo import UserRepository
+from src.infrastructure.persistence.repositories.tenant_repo import \
+    TenantRepository
+from src.infrastructure.persistence.repositories.user_repo import \
+    UserRepository
+from src.infrastructure.security.password import get_password_hash
+from src.presentation.api.dependencies import (get_current_tenant,
+                                               get_current_user,
+                                               get_tenant_repo, get_user_repo,
+                                               get_user_repo_transactional)
 from src.presentation.api.v1.schemas.token import TokenPayload
-from src.presentation.api.v1.schemas.user import UserCreate, UserResponse, UserUpdate
+from src.presentation.api.v1.schemas.user import (UserCreate, UserResponse,
+                                                  UserUpdate)
 
 router = APIRouter()
 
 
-@router.post(
-    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
     data: UserCreate,
     user_repo: Annotated[UserRepository, Depends(get_user_repo_transactional)],
@@ -32,14 +30,10 @@ async def register_user(
     """Register a new user account"""
     tenant = await tenant_repo.get_by_code(data.tenant_code)
     if not tenant:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid tenant code"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid tenant code")
 
     if tenant.status != "active":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant is not active"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant is not active")
 
     try:
         user = await user_repo.create_user(
@@ -71,9 +65,7 @@ async def get_current_user_info(
     """Get current authenticated user information"""
     user = await user_repo.get_by_id(current_user.sub)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return UserResponse.from_orm_model(user)
 
 
@@ -86,9 +78,7 @@ async def update_current_user(
     """Update current user information"""
     user = await user_repo.get_by_id(current_user.sub)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     try:
         if data.email:
@@ -112,9 +102,7 @@ async def list_users(
     current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
     user_repo: Annotated[UserRepository, Depends(get_user_repo)],
     skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
-    limit: Annotated[
-        int, Query(ge=1, le=1000, description="Max records to return")
-    ] = 100,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max records to return")] = 100,
 ):
     """List all users in current tenant (authenticated users only)"""
     users = await user_repo.get_users_by_tenant(current_tenant.id, skip, limit)
@@ -129,6 +117,4 @@ async def deactivate_current_user(
     """Deactivate current user account (soft delete)"""
     result = await user_repo.deactivate(current_user.sub)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

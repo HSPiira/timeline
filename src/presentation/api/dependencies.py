@@ -2,21 +2,29 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.security.jwt import verify_token
-from src.infrastructure.persistence.database import get_db, get_db_transactional
-from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.document_repo import DocumentRepository
-from src.infrastructure.persistence.repositories.event_repo import EventRepository
-from src.infrastructure.persistence.repositories.event_schema_repo import EventSchemaRepository
-from src.infrastructure.persistence.repositories.subject_repo import SubjectRepository
-from src.infrastructure.persistence.repositories.tenant_repo import TenantRepository
-from src.infrastructure.persistence.repositories.user_repo import UserRepository
-from src.presentation.api.v1.schemas.token import TokenPayload
 from src.application.services.authorization_service import AuthorizationService
-from src.infrastructure.cache.redis_cache import CacheService
-from src.application.use_cases.documents.document_operations import DocumentService
-from src.application.use_cases.events.create_event import EventService
 from src.application.services.hash_service import HashService
+from src.application.use_cases.documents.document_operations import \
+    DocumentService
+from src.application.use_cases.events.create_event import EventService
+from src.infrastructure.cache.redis_cache import CacheService
+from src.infrastructure.persistence.database import (get_db,
+                                                     get_db_transactional)
+from src.infrastructure.persistence.models.tenant import Tenant
+from src.infrastructure.persistence.repositories.document_repo import \
+    DocumentRepository
+from src.infrastructure.persistence.repositories.event_repo import \
+    EventRepository
+from src.infrastructure.persistence.repositories.event_schema_repo import \
+    EventSchemaRepository
+from src.infrastructure.persistence.repositories.subject_repo import \
+    SubjectRepository
+from src.infrastructure.persistence.repositories.tenant_repo import \
+    TenantRepository
+from src.infrastructure.persistence.repositories.user_repo import \
+    UserRepository
+from src.infrastructure.security.jwt import verify_token
+from src.presentation.api.v1.schemas.token import TokenPayload
 
 security = HTTPBearer()
 
@@ -95,7 +103,8 @@ def _build_event_service(
     db: AsyncSession, cache_service: CacheService | None = None
 ) -> EventService:
     """Internal helper to construct EventService with all dependencies"""
-    from src.application.use_cases.workflows.workflow_engine import WorkflowEngine
+    from src.application.use_cases.workflows.workflow_engine import \
+        WorkflowEngine
 
     event_repo = EventRepository(db)
     event_service = EventService(
@@ -220,7 +229,8 @@ async def get_document_service(
     cache: CacheService = Depends(get_cache_service),
 ) -> "DocumentService":
     """Document service dependency with caching"""
-    from src.application.use_cases.documents.document_operations import DocumentService
+    from src.application.use_cases.documents.document_operations import \
+        DocumentService
 
     return DocumentService(
         storage_service=storage,
@@ -235,7 +245,8 @@ async def get_document_service_transactional(
     cache: CacheService = Depends(get_cache_service),
 ) -> "DocumentService":
     """Document service dependency with transaction and caching"""
-    from src.application.use_cases.documents.document_operations import DocumentService
+    from src.application.use_cases.documents.document_operations import \
+        DocumentService
 
     return DocumentService(
         storage_service=storage,

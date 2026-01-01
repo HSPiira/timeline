@@ -1,19 +1,21 @@
 """Universal email sync service (provider-agnostic)"""
+
 from datetime import UTC, datetime, timedelta
 
 from google.auth.exceptions import RefreshError
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.telemetry.logging import get_logger
+from src.application.use_cases.events.create_event import EventService
 from src.infrastructure.external.email.encryption import CredentialEncryptor
 from src.infrastructure.external.email.factory import EmailProviderFactory
-from src.infrastructure.external.email.protocols import EmailMessage, EmailProviderConfig
+from src.infrastructure.external.email.protocols import (EmailMessage,
+                                                         EmailProviderConfig)
 from src.infrastructure.persistence.models.email_account import EmailAccount
 from src.infrastructure.persistence.models.event import Event
 from src.infrastructure.persistence.models.subject import Subject
 from src.presentation.api.v1.schemas.event import EventCreate
-from src.application.use_cases.events.create_event import EventService
+from src.shared.telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -30,9 +32,7 @@ class UniversalEmailSync:
         self.event_service = event_service
         self.encryptor = CredentialEncryptor()
 
-    async def sync_account(
-        self, email_account: EmailAccount, incremental: bool = True
-    ) -> dict:
+    async def sync_account(self, email_account: EmailAccount, incremental: bool = True) -> dict:
         """
         Sync email account to Timeline events (works with ANY provider).
 
@@ -74,12 +74,8 @@ class UniversalEmailSync:
                     email_account.credentials_encrypted = self.encryptor.encrypt(
                         updated_credentials
                     )
-                    email_account.token_last_refreshed_at = datetime.now(UTC).replace(
-                        tzinfo=None
-                    )
-                    email_account.token_refresh_count = (
-                        email_account.token_refresh_count or 0
-                    ) + 1
+                    email_account.token_last_refreshed_at = datetime.now(UTC).replace(tzinfo=None)
+                    email_account.token_refresh_count = (email_account.token_refresh_count or 0) + 1
                     logger.info(
                         f"Auto-refreshed OAuth tokens for {email_account.email_address} "
                         f"(refresh #{email_account.token_refresh_count}). System working correctly!"
@@ -89,7 +85,8 @@ class UniversalEmailSync:
                         email_account.token_refresh_failures or 0
                     ) + 1
                     logger.error(
-                        f"CRITICAL: Failed to save refreshed tokens for {email_account.email_address}: {e}. "
+                        f"CRITICAL: Failed to save refreshed tokens for "
+                        f"{email_account.email_address}: {e}. "
                         f"User may need to re-authenticate if tokens expire.",
                         exc_info=True,
                     )
@@ -102,9 +99,7 @@ class UniversalEmailSync:
             since = email_account.last_sync_at if incremental else None
             messages = await provider.fetch_messages(since=since, limit=100)
 
-            logger.info(
-                f"Fetched {len(messages)} messages from {email_account.provider_type}"
-            )
+            logger.info(f"Fetched {len(messages)} messages from {email_account.provider_type}")
 
             (
                 events_created,
@@ -112,9 +107,7 @@ class UniversalEmailSync:
             ) = await self._transform_and_create_events(email_account, messages)
 
             if events_created > 0 and last_processed_timestamp:
-                email_account.last_sync_at = last_processed_timestamp.replace(
-                    tzinfo=None
-                )
+                email_account.last_sync_at = last_processed_timestamp.replace(tzinfo=None)
             elif events_created == 0 and len(messages) > 0:
                 logger.warning(
                     f"Fetched {len(messages)} messages but created 0 events. "
@@ -124,7 +117,8 @@ class UniversalEmailSync:
             # Always commit to persist any token refreshes that occurred
             await self.db.commit()
             logger.info(
-                f"Sync transaction committed (events: {events_created}, last_sync_at updated: {events_created > 0})"
+                f"Sync transaction committed (events: {events_created}, "
+                f"last_sync_at updated: {events_created > 0})"
             )
 
             stats = {
@@ -141,9 +135,7 @@ class UniversalEmailSync:
             # Track authentication failure for monitoring
             email_account.last_auth_error = str(e)
             email_account.last_auth_error_at = datetime.now(UTC).replace(tzinfo=None)
-            email_account.token_refresh_failures = (
-                email_account.token_refresh_failures or 0
-            ) + 1
+            email_account.token_refresh_failures = (email_account.token_refresh_failures or 0) + 1
             await self.db.commit()  # Persist error tracking even on failure
 
             logger.error(
@@ -187,9 +179,7 @@ class UniversalEmailSync:
             try:
                 # IN-MEMORY CHECK: O(1) lookup instead of database query
                 if msg.message_id in existing_message_ids:
-                    logger.debug(
-                        f"Skipping message {msg.message_id} - event already exists"
-                    )
+                    logger.debug(f"Skipping message {msg.message_id} - event already exists")
                     last_successfully_processed_timestamp = msg.timestamp
                     continue
 
@@ -282,9 +272,7 @@ class UniversalEmailSync:
 
         return set(result.scalars().all())
 
-    async def _check_event_exists(
-        self, subject_id: str, message_id: str
-    ) -> Event | None:
+    async def _check_event_exists(self, subject_id: str, message_id: str) -> Event | None:
         """
         Check if an event already exists for this email message.
 
@@ -313,20 +301,14 @@ class UniversalEmailSync:
 
         result = await self.db.execute(
             select(Event.event_time)
-            .where(
-                and_(
-                    Event.subject_id == subject_id, Event.event_type == "email_received"
-                )
-            )
+            .where(and_(Event.subject_id == subject_id, Event.event_type == "email_received"))
             .order_by(desc(Event.event_time))
             .limit(1)
         )
 
         return result.scalar_one_or_none()
 
-    async def setup_webhook(
-        self, email_account: EmailAccount, callback_url: str
-    ) -> dict:
+    async def setup_webhook(self, email_account: EmailAccount, callback_url: str) -> dict:
         """Setup webhook for real-time sync (if provider supports it)"""
         credentials = self.encryptor.decrypt(email_account.credentials_encrypted)
         config = EmailProviderConfig(
@@ -347,16 +329,12 @@ class UniversalEmailSync:
         try:
             await provider.connect(config)
             webhook_config = await provider.setup_webhook(callback_url)
-            logger.info(
-                f"Webhook setup for {email_account.email_address}: {webhook_config}"
-            )
+            logger.info(f"Webhook setup for {email_account.email_address}: {webhook_config}")
             return webhook_config
         finally:
             await provider.disconnect()
 
-    async def get_subject_for_email(
-        self, tenant_id: str, email_address: str
-    ) -> Subject | None:
+    async def get_subject_for_email(self, tenant_id: str, email_address: str) -> Subject | None:
         """Get or create Subject for email account"""
         result = await self.db.execute(
             select(Subject).where(
