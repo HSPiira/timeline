@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.persistence.database import get_db
-from src.infrastructure.persistence.repositories.tenant_repo import \
-    TenantRepository
-from src.infrastructure.persistence.repositories.user_repo import \
-    UserRepository
+from src.infrastructure.persistence.repositories import (
+    TenantRepository, 
+    UserRepository,
+)
 from src.infrastructure.security.jwt import create_access_token
 from src.presentation.api.v1.schemas.token import Token, TokenRequest
 from src.presentation.middleware.rate_limit import limiter
@@ -46,7 +46,7 @@ async def login(
 
     if not tenant or tenant.status != "active":
         # Use generic error to prevent tenant enumeration
-        logger.warning(f"Login attempt for invalid/inactive tenant: {token_request.tenant_code}")
+        logger.warning("Login attempt for invalid/inactive tenant: %s", token_request.tenant_code)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -63,7 +63,9 @@ async def login(
 
     if not user:
         logger.warning(
-            f"Failed login attempt for user: {token_request.username} in tenant: {tenant.id}"
+            "Failed login attempt for user: %s in tenant: %s",
+            token_request.username,
+            tenant.id,
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -83,7 +85,7 @@ async def login(
         expires_delta=access_token_expires,
     )
 
-    logger.info(f"Successful login for user: {user.username} in tenant: {tenant.id}")
+    logger.info("Successful login for user: %s in tenant: %s", user.username, tenant.id)
     return Token(access_token=access_token, token_type="bearer")
 
 
@@ -103,7 +105,7 @@ if settings.debug and os.getenv("ENABLE_TEST_AUTH") == "true":
         # Verify test key
         expected_key = os.getenv("TEST_AUTH_KEY")
         if not expected_key or test_key != expected_key:
-            logger.warning(f"Invalid test token request from {request.client.host}")
+            logger.warning("Invalid test token request from %s", request.client.host)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Endpoint not found",
@@ -118,5 +120,5 @@ if settings.debug and os.getenv("ENABLE_TEST_AUTH") == "true":
             }
         )
 
-        logger.info(f"Test token created for tenant: {tenant_id}, user: {user_id}")
+        logger.info("Test token created for tenant: %s, user: %s", tenant_id, user_id)
         return Token(access_token=access_token, token_type="bearer")

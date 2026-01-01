@@ -2,7 +2,7 @@ import json
 import os
 # Import sanitization utilities
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -59,9 +59,7 @@ class EventCreate(BaseModel):
             raise ValueError("Event time cannot be in the future")
 
         # Check if too old (e.g., more than 10 years)
-        years_ago = (
-            datetime.now(v.tzinfo).year - v.year if v.tzinfo else datetime.now().year - v.year
-        )
+        years_ago = datetime.now(UTC).year - v.year 
         if years_ago > 10:
             raise ValueError("Event time cannot be more than 10 years in the past")
 

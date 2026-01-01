@@ -5,18 +5,24 @@ from fastapi.params import Query
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.tenant_repo import \
-    TenantRepository
-from src.infrastructure.persistence.repositories.user_repo import \
-    UserRepository
+from src.infrastructure.persistence.repositories import (
+    TenantRepository, 
+    UserRepository,
+)
 from src.infrastructure.security.password import get_password_hash
-from src.presentation.api.dependencies import (get_current_tenant,
-                                               get_current_user,
-                                               get_tenant_repo, get_user_repo,
-                                               get_user_repo_transactional)
+from src.presentation.api.dependencies import (
+    get_current_tenant, 
+    get_current_user, 
+    get_tenant_repo, 
+    get_user_repo, 
+    get_user_repo_transactional,
+)
 from src.presentation.api.v1.schemas.token import TokenPayload
-from src.presentation.api.v1.schemas.user import (UserCreate, UserResponse,
-                                                  UserUpdate)
+from src.presentation.api.v1.schemas.user import (
+    UserCreate, 
+    UserResponse, 
+    UserUpdate,
+)
 
 router = APIRouter()
 

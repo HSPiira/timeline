@@ -1,16 +1,13 @@
 """Utility functions and decorators for distributed tracing"""
 
-import logging
 from collections.abc import Callable
 from functools import wraps
 
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
-logger = logging.getLogger(__name__)
 
-
-def traced(operation_name=str | None, attributes=None):
+def traced(operation_name: str | None = None, attributes: dict | None = None) -> Callable:
     """
     Decorator to create a span for a function
 

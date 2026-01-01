@@ -1,7 +1,7 @@
 """Unit tests for S3StorageService"""
 
 import io
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -64,7 +64,7 @@ class TestS3StorageUpload:
         mock_s3_client.head_object = AsyncMock(
             side_effect=[
                 ClientError({"Error": {"Code": "404"}}, "head_object"),  # First check
-                {"ContentLength": 35, "LastModified": datetime.utcnow()},  # After upload
+                {"ContentLength": 35, "LastModified": datetime.now(UTC)()},  # After upload
             ]
         )
 

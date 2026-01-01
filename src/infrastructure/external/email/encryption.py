@@ -11,6 +11,7 @@ from src.infrastructure.config.settings import get_settings
 
 settings = get_settings()
 
+DECRYPTION_ERROR_MSG = "Failed to decrypt credentials - invalid or corrupted data"
 
 class CredentialEncryptor:
     """Encrypt/decrypt email credentials using Fernet symmetric encryption"""
@@ -78,6 +79,6 @@ class CredentialEncryptor:
                 raise ValueError("Decrypted credentials must be a dictionary")
             return result
         except InvalidToken as e:
-            raise ValueError("Failed to decrypt credentials - invalid or corrupted data") from e
+            raise ValueError(DECRYPTION_ERROR_MSG) from e
         except json.JSONDecodeError as e:
             raise ValueError("Decrypted credentials are not valid JSON") from e

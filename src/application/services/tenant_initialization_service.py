@@ -129,7 +129,7 @@ DEFAULT_ROLES: dict[str, RoleData] = {
 class TenantInitializationService:
     """Service for initializing new tenants with default RBAC setup"""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
     async def initialize_tenant(self, tenant_id: str, admin_user_id: str) -> dict:
@@ -159,20 +159,23 @@ class TenantInitializationService:
     async def _create_permissions(self, tenant_id: str) -> dict[str, str]:
         """Create default permissions for a tenant. Returns mapping of code -> permission_id"""
         permission_map = {}
+        permissions = []
 
         for code, resource, action, description in SYSTEM_PERMISSIONS:
+            perm_id = generate_cuid()
             permission = Permission(
-                id=generate_cuid(),
+                id=perm_id,
                 tenant_id=tenant_id,
                 code=code,
                 resource=resource,
                 action=action,
                 description=description,
             )
-            self.db.add(permission)
-            await self.db.flush()
-            permission_map[code] = permission.id
+            permissions.append(permission)
+            permission_map[code] = perm_id
 
+        self.db.add_all(permissions)
+        await self.db.flush()
         return permission_map
 
     async def _create_roles(
@@ -227,7 +230,7 @@ class TenantInitializationService:
 
     async def _assign_admin_role(
         self, tenant_id: str, user_id: str, admin_role_id: str
-    ):
+    ) -> None:
         """Assign admin role to the specified user"""
         user_role = UserRole(
             id=generate_cuid(),

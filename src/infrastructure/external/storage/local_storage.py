@@ -80,7 +80,7 @@ class LocalStorageService:
         try:
             full_path.relative_to(self.storage_root)
         except ValueError as e:
-            raise StoragePermissionError(f"Path traversal detected: {storage_ref}") from e
+            raise StoragePermissionError(storage_ref, "path_validation") from e
 
         return full_path
 

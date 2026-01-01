@@ -114,14 +114,17 @@ class Event(CuidMixin, TenantMixin, Base):
 
             if not prev_event:
                 raise ValueError(
-                    f"Invalid previous_hash: {previous_hash} not found for subject {subject_id}"
+                    "Invalid previous_hash: %s not found for subject %s",
+                    previous_hash,
+                    subject_id,
                 )
 
             # Enforce temporal ordering
             if event_time <= prev_event.event_time:
                 raise ValueError(
-                    f"Event time {event_time} must be after "
-                    f"previous event time {prev_event.event_time}"
+                    "Event time %s must be after previous event time %s",
+                    event_time,
+                    prev_event.event_time,
                 )
 
         # Compute hash with validated inputs
@@ -155,5 +158,5 @@ def prevent_event_updates(mapper, connection, target):
     This is fundamental to event sourcing and audit trail integrity.
     """
     raise ValueError(
-        "Events are immutable and cannot be updated. " "Create a new compensating event instead."
+        "Events are immutable and cannot be updated. Create a new compensating event instead."
     )

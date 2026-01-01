@@ -106,7 +106,7 @@ class TelemetryConfig:
                 return self.tracer_provider
 
             else:
-                logger.warning(f"Unknown exporter type '{exporter_type}', using console")
+                logger.warning("Unknown exporter type '%s', using console", exporter_type)
                 exporter = ConsoleSpanExporter()
 
             # Add batch span processor
@@ -117,8 +117,10 @@ class TelemetryConfig:
             trace.set_tracer_provider(self.tracer_provider)
 
             logger.info(
-                f"OpenTelemetry initialized: service={self.service_name}, "
-                f"version={self.service_version}, exporter={exporter_type}"
+                "OpenTelemetry initialized: service=%s, version=%s, exporter=%s",
+                self.service_name,
+                self.service_version,
+                exporter_type,
             )
 
             return self.tracer_provider
@@ -148,7 +150,7 @@ class TelemetryConfig:
             )
             logger.info("FastAPI instrumentation enabled")
         except Exception as e:
-            logger.error(f"Failed to instrument FastAPI: {e}")
+            logger.error("Failed to instrument FastAPI: %s", e)
 
     def instrument_sqlalchemy(self, engine: AsyncEngine):
         """
@@ -170,7 +172,7 @@ class TelemetryConfig:
             )
             logger.info("SQLAlchemy instrumentation enabled")
         except Exception as e:
-            logger.error(f"Failed to instrument SQLAlchemy: {e}")
+            logger.error("Failed to instrument SQLAlchemy: %s", e)
 
     def instrument_redis(self):
         """
@@ -188,7 +190,7 @@ class TelemetryConfig:
             RedisInstrumentor().instrument(tracer_provider=self.tracer_provider)
             logger.info("Redis instrumentation enabled")
         except Exception as e:
-            logger.error(f"Failed to instrument Redis: {e}")
+            logger.error("Failed to instrument Redis: %s", e)
 
     def instrument_logging(self):
         """
@@ -208,7 +210,7 @@ class TelemetryConfig:
             )
             logger.info("Logging instrumentation enabled")
         except Exception as e:
-            logger.error(f"Failed to instrument logging: {e}")
+            logger.error("Failed to instrument logging: %s", e)
 
     def shutdown(self):
         """Shutdown tracer provider and flush remaining spans"""
@@ -217,7 +219,7 @@ class TelemetryConfig:
                 self.tracer_provider.shutdown()
                 logger.info("Telemetry shutdown complete")
             except Exception as e:
-                logger.error(f"Error during telemetry shutdown: {e}")
+                logger.error("Error during telemetry shutdown: %s", e)
 
 
 # Global telemetry instance

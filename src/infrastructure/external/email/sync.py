@@ -32,7 +32,7 @@ class UniversalEmailSync:
         self.event_service = event_service
         self.encryptor = CredentialEncryptor()
 
-    async def sync_account(self, email_account: EmailAccount, incremental: bool = True) -> dict:
+    async def sync_account(self, email_account: EmailAccount, *, incremental: bool = True) -> dict:
         """
         Sync email account to Timeline events (works with ANY provider).
 
@@ -44,8 +44,10 @@ class UniversalEmailSync:
             Sync statistics
         """
         logger.info(
-            f"Starting sync for {email_account.email_address} "
-            f"(provider: {email_account.provider_type}, incremental: {incremental})"
+            "Starting sync for %s (provider: %s, incremental: %s)",
+            email_account.email_address,
+            email_account.provider_type,
+            incremental
         )
 
         credentials = self.encryptor.decrypt(email_account.credentials_encrypted)
@@ -77,17 +79,18 @@ class UniversalEmailSync:
                     email_account.token_last_refreshed_at = datetime.now(UTC).replace(tzinfo=None)
                     email_account.token_refresh_count = (email_account.token_refresh_count or 0) + 1
                     logger.info(
-                        f"Auto-refreshed OAuth tokens for {email_account.email_address} "
-                        f"(refresh #{email_account.token_refresh_count}). System working correctly!"
+                        "Auto-refreshed OAuth tokens for %s (refresh #%s). System working correctly!",
+                        email_account.email_address,
+                        email_account.token_refresh_count
                     )
                 except Exception as e:
                     email_account.token_refresh_failures = (
                         email_account.token_refresh_failures or 0
                     ) + 1
                     logger.error(
-                        f"CRITICAL: Failed to save refreshed tokens for "
-                        f"{email_account.email_address}: {e}. "
-                        f"User may need to re-authenticate if tokens expire.",
+                        "CRITICAL: Failed to save refreshed tokens for %s: %s. User may need to re-authenticate if tokens expire.",
+                        email_account.email_address,
+                        e,
                         exc_info=True,
                     )
 

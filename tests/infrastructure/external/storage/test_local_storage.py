@@ -414,7 +414,7 @@ class TestLocalStoragePresignedURLs:
         storage_ref = "tenants/acme/documents/doc_123/v1/test.txt"
 
         # WHEN/THEN
-        from core.exceptions import StorageNotSupportedError
+        from src.infrastructure.exceptions import StorageNotSupportedError
 
         with pytest.raises(StorageNotSupportedError) as exc_info:
             await storage_service.generate_download_url(storage_ref)

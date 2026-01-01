@@ -55,12 +55,14 @@ class CacheService:
                 await self.redis.ping()
                 self._connected = True
                 logger.info(
-                    f"Redis cache connected: {self.settings.redis_host}:{self.settings.redis_port}"
+                    "Redis cache connected: %s:%s",
+                    self.settings.redis_host,
+                    self.settings.redis_port
                 )
             except (redis.ConnectionError, redis.TimeoutError) as e:
                 logger.warning(
-                    f"Redis connection failed: {e}. "
-                    "Cache disabled - falling back to database queries."
+                    "Redis connection failed: %s. Cache disabled - falling back to database queries.",
+                    e  
                 )
                 self._connected = False
                 self.redis = None

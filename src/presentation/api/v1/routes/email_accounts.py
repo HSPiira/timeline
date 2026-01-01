@@ -264,7 +264,7 @@ async def sync_email_account_background(
     }
 
 
-async def _run_email_sync_background(account_id: str, tenant_id: str, incremental: bool = True):
+async def _run_email_sync_background(account_id: str, tenant_id: str, *, incremental: bool = True) -> None:
     """
     Background task to run email sync.
 
@@ -280,7 +280,7 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, incrementa
 
     async with AsyncSessionLocal() as db:
         try:
-            logger.info(f"Starting background sync for account {account_id}")
+            logger.info("Starting background sync for account %s", account_id)
 
             # Get email account
             result = await db.execute(
@@ -291,7 +291,7 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, incrementa
             account = result.scalar_one_or_none()
 
             if not account:
-                logger.error(f"Email account {account_id} not found in background task")
+                logger.error("Email account %s not found in background task", account_id)
                 return
 
             # Create services
@@ -312,10 +312,10 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, incrementa
             )
 
         except AuthenticationError as e:
-            logger.error(f"Authentication failed for account {account_id}: {e}", exc_info=True)
+            logger.exception("Authentication failed for account %s: %s", account_id, e)
             # Could notify user via webhook or email that re-authentication is needed
         except Exception as e:
-            logger.error(f"Background sync failed for account {account_id}: {e}", exc_info=True)
+            logger.exception("Background sync failed for account %s: %s", account_id, e)
 
 
 @router.post("/{account_id}/webhook", response_model=dict)
@@ -346,7 +346,7 @@ async def setup_webhook(
         # Store webhook ID
         account.webhook_id = webhook_config.get("id") or webhook_config.get("subscriptionId")
         if not account.webhook_id:
-            logger.warning(f"Webhook setup response missing ID: {webhook_config}")
+            logger.warning("Webhook setup response missing ID: %s", webhook_config)
 
         return webhook_config
 

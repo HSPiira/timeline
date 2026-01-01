@@ -63,8 +63,6 @@ storage/**
 .python-version
 alembic.ini
 pytest.ini
-pyproject.toml
-uv.lock
 requirements-dev.txt
 
 # Logs

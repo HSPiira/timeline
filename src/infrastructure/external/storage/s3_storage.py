@@ -214,7 +214,7 @@ class S3StorageService:
         except (StorageChecksumMismatchError, StorageAlreadyExistsError):
             raise
         except Exception as e:
-            raise StorageUploadError(f"S3 upload failed: {str(e)}") from e
+            raise StorageUploadError(file_path=storage_ref, reason=str(e)) from e
 
     async def download(self, storage_ref: str) -> AsyncIterator[bytes]:
         """
@@ -253,7 +253,7 @@ class S3StorageService:
         except StorageNotFoundError:
             raise
         except Exception as e:
-            raise StorageDownloadError(f"S3 download failed: {str(e)}") from e
+            raise StorageDownloadError(file_path=storage_ref, reason=str(e)) from e
 
     async def delete(self, storage_ref: str) -> bool:
         """
@@ -283,7 +283,7 @@ class S3StorageService:
                 return True
 
         except Exception as e:
-            raise StorageDeleteError(f"S3 delete failed: {str(e)}") from e
+            raise StorageDeleteError(file_path=storage_ref, reason=str(e)) from e
 
     async def exists(self, storage_ref: str) -> bool:
         """
@@ -335,10 +335,10 @@ class S3StorageService:
 
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
-                raise StorageNotFoundError(f"Object not found: {storage_ref}") from e
+                raise StorageNotFoundError(file_path=storage_ref) from e
             raise
         except Exception as e:
-            raise StorageDownloadError(f"Failed to get metadata: {str(e)}") from e
+            raise StorageDownloadError(file_path=storage_ref, reason=str(e)) from e
 
     async def generate_download_url(
         self, storage_ref: str, expiration: timedelta = timedelta(hours=1)
@@ -363,7 +363,7 @@ class S3StorageService:
                     await s3.head_object(Bucket=self.bucket, Key=storage_ref)
                 except ClientError as e:
                     if e.response["Error"]["Code"] == "404":
-                        raise StorageNotFoundError(f"Object not found: {storage_ref}") from e
+                        raise StorageNotFoundError(file_path=storage_ref) from e
                     raise
 
                 # Generate pre-signed URL
@@ -378,4 +378,4 @@ class S3StorageService:
         except StorageNotFoundError:
             raise
         except Exception as e:
-            raise StorageDownloadError(f"Failed to generate URL: {str(e)}") from e
+            raise StorageDownloadError(file_path=storage_ref, reason=str(e)) from e

@@ -100,8 +100,10 @@ class WorkflowEngine:
         from src.presentation.api.v1.schemas.event import EventCreate
 
         logger.info(
-            f"Executing workflow '{workflow.name}' (id: {workflow.id}) "
-            f"triggered by event {triggered_by.id}"
+            "Executing workflow '%s' (id: %s) triggered by event %s",
+            workflow.name,
+            workflow.id,
+            triggered_by.id
         )
 
         execution = WorkflowExecution(
@@ -110,7 +112,7 @@ class WorkflowEngine:
             triggered_by_event_id=triggered_by.id,
             triggered_by_subject_id=triggered_by.subject_id,
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(UTC),
         )
 
         self.db.add(execution)
@@ -151,15 +153,16 @@ class WorkflowEngine:
                         )
                         actions_executed += 1
                         logger.debug(
-                            f"Workflow action created event {created_event.id} "
-                            f"(type: {created_event.event_type})"
+                            "Workflow action created event %s (type: %s)",
+                            created_event.id,
+                            created_event.event_type
                         )
                     except Exception as e:
                         execution_log.append(
                             {"action": action_type, "status": "failed", "error": str(e)}
                         )
                         actions_failed += 1
-                        logger.warning(f"Workflow action failed: {action_type} - {str(e)}")
+                        logger.warning("Workflow action failed: %s - %s", action_type, str(e))
                 else:
                     execution_log.append(
                         {
@@ -168,19 +171,21 @@ class WorkflowEngine:
                             "reason": f"Unknown action type: {action_type}",
                         }
                     )
-                    logger.warning(f"Unknown workflow action type: {action_type}")
+                    logger.warning("Unknown workflow action type: %s", action_type)
 
             execution.status = "completed"
             logger.info(
-                f"Workflow execution {execution.id} completed: "
-                f"{actions_executed} succeeded, {actions_failed} failed"
+                "Workflow execution %s completed: %d succeeded, %d failed",
+                execution.id,
+                actions_executed,
+                actions_failed
             )
         except Exception as e:
             execution.status = "failed"
             execution.error_message = str(e)
-            logger.error(f"Workflow execution {execution.id} failed: {str(e)}", exc_info=True)
+            logger.exception("Workflow execution %s failed: %s", execution.id, str(e))
 
-        execution.completed_at = datetime.utcnow()
+        execution.completed_at = datetime.now(UTC)
         execution.actions_executed = actions_executed
         execution.actions_failed = actions_failed
         execution.execution_log = execution_log
