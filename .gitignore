@@ -136,6 +136,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
+/summaries
 
 # mypy
 .mypy_cache/
@@ -524,8 +525,7 @@ docs/build/
 # Uploaded files (documents should be in S3, not git)
 uploads/
 media/
-storage/
-documents/
+/storage/
 
 # Large files
 *.pdf

@@ -5,12 +5,24 @@ Usage:
     python -m scripts.seed_rbac
 """
 import asyncio
+from typing import TypedDict
+
 from sqlalchemy import select
+
 from core.database import AsyncSessionLocal
-from models.tenant import Tenant
+from models.permission import Permission, RolePermission
 from models.role import Role
-from models.persmission import Permission, RolePermission
+from models.tenant import Tenant
 from utils.generators import generate_cuid
+
+
+class RoleData(TypedDict):
+    """Type definition for role configuration"""
+
+    name: str
+    description: str
+    permissions: list[str]
+    is_system: bool
 
 
 # System permissions - standard set for all tenants
@@ -19,56 +31,48 @@ SYSTEM_PERMISSIONS = [
     ("event:create", "event", "create", "Create events"),
     ("event:read", "event", "read", "View event details"),
     ("event:list", "event", "list", "List events"),
-
     # Subject permissions
     ("subject:create", "subject", "create", "Create subjects"),
     ("subject:read", "subject", "read", "View subject details"),
     ("subject:update", "subject", "update", "Update subjects"),
     ("subject:delete", "subject", "delete", "Delete subjects"),
     ("subject:list", "subject", "list", "List subjects"),
-
     # User management
     ("user:create", "user", "create", "Create users"),
     ("user:read", "user", "read", "View users"),
     ("user:update", "user", "update", "Update users"),
     ("user:deactivate", "user", "deactivate", "Deactivate users"),
     ("user:list", "user", "list", "List users"),
-
     # Role management
     ("role:create", "role", "create", "Create roles"),
     ("role:read", "role", "read", "View roles"),
     ("role:update", "role", "update", "Modify roles"),
     ("role:delete", "role", "delete", "Delete roles"),
     ("role:assign", "role", "assign", "Assign roles to users"),
-
     # Permission management
     ("permission:create", "permission", "create", "Create permissions"),
     ("permission:read", "permission", "read", "View permissions"),
     ("permission:delete", "permission", "delete", "Delete permissions"),
-
     # Document permissions
     ("document:create", "document", "create", "Upload documents"),
     ("document:read", "document", "read", "View documents"),
     ("document:delete", "document", "delete", "Delete documents"),
-
     # Event schema permissions
     ("event_schema:create", "event_schema", "create", "Create event schemas"),
     ("event_schema:read", "event_schema", "read", "View event schemas"),
     ("event_schema:update", "event_schema", "update", "Update event schemas"),
-
     # Workflow permissions
     ("workflow:create", "workflow", "create", "Create workflows"),
     ("workflow:read", "workflow", "read", "View workflows"),
     ("workflow:update", "workflow", "update", "Update workflows"),
     ("workflow:delete", "workflow", "delete", "Delete workflows"),
-
     # Wildcard permissions
     ("*:*", "*", "*", "Super admin - all permissions"),
 ]
 
 
 # Default roles with permission assignments
-DEFAULT_ROLES = {
+DEFAULT_ROLES: dict[str, RoleData] = {
     "admin": {
         "name": "Administrator",
         "description": "Full system access with all permissions",
@@ -79,9 +83,14 @@ DEFAULT_ROLES = {
         "name": "Manager",
         "description": "Can manage events, subjects, and users",
         "permissions": [
-            "event:*", "subject:*", "user:read", "user:create",
-            "user:list", "document:*", "event_schema:read",
-            "workflow:*"
+            "event:*",
+            "subject:*",
+            "user:read",
+            "user:create",
+            "user:list",
+            "document:*",
+            "event_schema:read",
+            "workflow:*",
         ],
         "is_system": True,
     },
@@ -89,10 +98,16 @@ DEFAULT_ROLES = {
         "name": "Agent",
         "description": "Can create and view events and subjects",
         "permissions": [
-            "event:create", "event:read", "event:list",
-            "subject:create", "subject:read", "subject:update", "subject:list",
-            "document:create", "document:read",
-            "event_schema:read"
+            "event:create",
+            "event:read",
+            "event:list",
+            "subject:create",
+            "subject:read",
+            "subject:update",
+            "subject:list",
+            "document:create",
+            "document:read",
+            "event_schema:read",
         ],
         "is_system": True,
     },
@@ -100,10 +115,12 @@ DEFAULT_ROLES = {
         "name": "Auditor (Read-Only)",
         "description": "Read-only access to events and subjects",
         "permissions": [
-            "event:read", "event:list",
-            "subject:read", "subject:list",
+            "event:read",
+            "event:list",
+            "subject:read",
+            "subject:list",
             "document:read",
-            "event_schema:read"
+            "event_schema:read",
         ],
         "is_system": True,
     },
@@ -118,8 +135,7 @@ async def seed_permissions_for_tenant(db, tenant_id: str) -> dict[str, str]:
         # Check if permission already exists
         result = await db.execute(
             select(Permission).where(
-                Permission.tenant_id == tenant_id,
-                Permission.code == code
+                Permission.tenant_id == tenant_id, Permission.code == code
             )
         )
         existing = result.scalar_one_or_none()
@@ -135,7 +151,7 @@ async def seed_permissions_for_tenant(db, tenant_id: str) -> dict[str, str]:
             code=code,
             resource=resource,
             action=action,
-            description=description
+            description=description,
         )
         db.add(permission)
         await db.flush()
@@ -151,10 +167,7 @@ async def seed_roles_for_tenant(db, tenant_id: str, permission_map: dict[str, st
     for role_code, role_data in DEFAULT_ROLES.items():
         # Check if role already exists
         result = await db.execute(
-            select(Role).where(
-                Role.tenant_id == tenant_id,
-                Role.code == role_code
-            )
+            select(Role).where(Role.tenant_id == tenant_id, Role.code == role_code)
         )
         existing = result.scalar_one_or_none()
 
@@ -170,7 +183,7 @@ async def seed_roles_for_tenant(db, tenant_id: str, permission_map: dict[str, st
             name=role_data["name"],
             description=role_data["description"],
             is_system=role_data["is_system"],
-            is_active=True
+            is_active=True,
         )
         db.add(role)
         await db.flush()
@@ -179,6 +192,7 @@ async def seed_roles_for_tenant(db, tenant_id: str, permission_map: dict[str, st
         # Assign permissions to role
         for perm_pattern in role_data["permissions"]:
             # Handle wildcards (e.g., "event:*" means all event permissions)
+            matching_perms: list[tuple[str, str]] = []
             if perm_pattern.endswith(":*"):
                 resource_prefix = perm_pattern[:-2]
                 matching_perms = [
@@ -187,7 +201,9 @@ async def seed_roles_for_tenant(db, tenant_id: str, permission_map: dict[str, st
                     if code.startswith(resource_prefix + ":")
                 ]
             else:
-                matching_perms = [(perm_pattern, permission_map.get(perm_pattern))]
+                perm_id = permission_map.get(perm_pattern)
+                if perm_id:
+                    matching_perms = [(perm_pattern, perm_id)]
 
             for perm_code, perm_id in matching_perms:
                 if not perm_id:
@@ -198,7 +214,7 @@ async def seed_roles_for_tenant(db, tenant_id: str, permission_map: dict[str, st
                     id=generate_cuid(),
                     tenant_id=tenant_id,
                     role_id=role.id,
-                    permission_id=perm_id
+                    permission_id=perm_id,
                 )
                 db.add(role_permission)
 
@@ -210,9 +226,7 @@ async def seed_all_tenants():
     """Seed RBAC data for all active tenants"""
     async with AsyncSessionLocal() as db:
         # Get all active tenants
-        result = await db.execute(
-            select(Tenant).where(Tenant.status == "active")
-        )
+        result = await db.execute(select(Tenant).where(Tenant.status == "active"))
         tenants = result.scalars().all()
 
         print(f"\n🌱 Seeding RBAC data for {len(tenants)} tenant(s)...\n")
