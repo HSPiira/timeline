@@ -4,17 +4,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.authorization_service import AuthorizationService
 from src.application.services.hash_service import HashService
+from src.application.services.tenant_creation_service import TenantCreationService
+from src.application.services.tenant_initialization_service import TenantInitializationService
 from src.application.use_cases.documents.document_operations import DocumentService
 from src.application.use_cases.events.create_event import EventService
 from src.infrastructure.cache.redis_cache import CacheService
 from src.infrastructure.persistence.database import get_db, get_db_transactional
 from src.infrastructure.persistence.models.tenant import Tenant
 from src.infrastructure.persistence.repositories import (
-    DocumentRepository, 
-    EventRepository, 
-    EventSchemaRepository, 
-    SubjectRepository, 
-    TenantRepository, 
+    DocumentRepository,
+    EventRepository,
+    EventSchemaRepository,
+    SubjectRepository,
+    TenantRepository,
     UserRepository,
 )
 from src.infrastructure.security.jwt import verify_token
@@ -279,3 +281,15 @@ async def get_authz_service(
 ) -> AuthorizationService:
     """Get authorization service for manual permission checks with caching"""
     return AuthorizationService(db, cache_service=cache)
+
+
+async def get_tenant_creation_service(
+    db: AsyncSession = Depends(get_db_transactional),
+    cache: CacheService = Depends(get_cache_service),
+) -> TenantCreationService:
+    """Tenant creation service with transaction management"""
+    return TenantCreationService(
+        tenant_repo=TenantRepository(db, cache_service=cache),
+        user_repo=UserRepository(db),
+        init_service=TenantInitializationService(db),
+    )

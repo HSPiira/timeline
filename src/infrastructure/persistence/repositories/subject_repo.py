@@ -1,17 +1,42 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.persistence.models.subject import Subject
-from src.infrastructure.persistence.repositories.base import BaseRepository
+from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
+
+if TYPE_CHECKING:
+    from src.application.services.system_audit_service import SystemAuditService
 
 
-class SubjectRepository(BaseRepository[Subject]):
-    """Repository for Subject entity following LSP"""
+class SubjectRepository(AuditableRepository[Subject]):
+    """Repository for Subject entity with automatic audit tracking."""
 
-    def __init__(self, db: AsyncSession):
-        super().__init__(db, Subject)
+    def __init__(
+        self,
+        db: AsyncSession,
+        audit_service: "SystemAuditService | None" = None,
+        *,
+        enable_audit: bool = True,
+    ):
+        super().__init__(db, Subject, audit_service, enable_audit=enable_audit)
+
+    # Auditable implementation
+    def _get_entity_type(self) -> str:
+        return "subject"
+
+    def _get_tenant_id(self, obj: Subject) -> str:
+        return obj.tenant_id
+
+    def _serialize_for_audit(self, obj: Subject) -> dict[str, Any]:
+        return {
+            "id": obj.id,
+            "subject_type": obj.subject_type,
+            "external_ref": obj.external_ref,
+        }
 
     async def get_by_tenant(self, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Subject]:
         """Get all subjects for a tenant with pagination"""

@@ -5,13 +5,23 @@ This service is called when a new tenant is created to set up:
 - Default permissions
 - Default roles (admin, manager, agent, auditor)
 - Role-permission assignments
+- System audit schema and subject for audit trail
 """
 from typing import TypedDict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.system_audit_schema import (
+    SYSTEM_AUDIT_EVENT_TYPE,
+    SYSTEM_AUDIT_SCHEMA_VERSION,
+    SYSTEM_AUDIT_SUBJECT_REF,
+    SYSTEM_AUDIT_SUBJECT_TYPE,
+    get_system_audit_schema_definition,
+)
+from src.infrastructure.persistence.models.event_schema import EventSchema
 from src.infrastructure.persistence.models.permission import Permission, RolePermission, UserRole
 from src.infrastructure.persistence.models.role import Role
+from src.infrastructure.persistence.models.subject import Subject
 from src.shared.utils.generators import generate_cuid
 
 
@@ -125,13 +135,17 @@ DEFAULT_ROLES: dict[str, RoleData] = {
     },
 }
 
-class InitializationResult(TypedDict):  
-    """Result of tenant initialization"""  
-    permissions_created: int  
-    roles_created: int  
-    admin_role_assigned: bool  
 
-    
+class InitializationResult(TypedDict):
+    """Result of tenant initialization"""
+
+    permissions_created: int
+    roles_created: int
+    admin_role_assigned: bool
+    audit_schema_created: bool
+    audit_subject_created: bool
+
+
 class TenantInitializationService:
     """Service for initializing new tenants with default RBAC setup"""
 
@@ -144,26 +158,40 @@ class TenantInitializationService:
         - Default permissions
         - Default roles
         - Admin role assigned to the admin user
+        - System audit schema for tracking all CRUD operations
+        - System audit subject for audit event chain
 
-        Returns a dict with created entities count
+        Uses a single flush at the end for optimal database performance.
+        Returns a dict with created entities count.
         """
-        # Create permissions
-        permission_map = await self._create_permissions(tenant_id)
+        # Collect all entities to insert
+        permissions, permission_map = self._build_permissions(tenant_id)
+        roles, role_permissions, role_map = self._build_roles(tenant_id, permission_map)
+        user_role = self._build_admin_assignment(tenant_id, admin_user_id, role_map["admin"])
 
-        # Create roles with permission assignments
-        roles = await self._create_roles(tenant_id, permission_map)
+        # Build system audit infrastructure
+        audit_schema = self._build_audit_schema(tenant_id, admin_user_id)
+        audit_subject = self._build_audit_subject(tenant_id)
 
-        # Assign admin role to admin user
-        await self._assign_admin_role(tenant_id, admin_user_id, roles["admin"])
+        # Batch insert all entities with single flush
+        self.db.add_all(permissions)
+        self.db.add_all(roles)
+        self.db.add_all(role_permissions)
+        self.db.add(user_role)
+        self.db.add(audit_schema)
+        self.db.add(audit_subject)
+        await self.db.flush()
 
         return {
             "permissions_created": len(permission_map),
-            "roles_created": len(roles),
+            "roles_created": len(role_map),
             "admin_role_assigned": True,
+            "audit_schema_created": True,
+            "audit_subject_created": True,
         }
 
-    async def _create_permissions(self, tenant_id: str) -> dict[str, str]:
-        """Create default permissions for a tenant. Returns mapping of code -> permission_id"""
+    def _build_permissions(self, tenant_id: str) -> tuple[list[Permission], dict[str, str]]:
+        """Build permission entities. Returns (permissions list, code->id map)"""
         permission_map: dict[str, str] = {}
         permissions: list[Permission] = []
 
@@ -180,23 +208,19 @@ class TenantInitializationService:
             permissions.append(permission)
             permission_map[code] = perm_id
 
-        self.db.add_all(permissions)
-        await self.db.flush()
-        return permission_map
+        return permissions, permission_map
 
-    async def _create_roles(
+    def _build_roles(
         self, tenant_id: str, permission_map: dict[str, str]
-    ) -> dict[str, str]:
-        """Create default roles with permissions. Returns mapping of role_code -> role_id"""
+    ) -> tuple[list[Role], list[RolePermission], dict[str, str]]:
+        """Build role and role-permission entities."""
         role_map: dict[str, str] = {}
         roles: list[Role] = []
         role_permissions: list[RolePermission] = []
 
         for role_code, role_data in DEFAULT_ROLES.items():
-            # Pre-generate role ID
             role_id = generate_cuid()
 
-            # Create role
             role = Role(
                 id=role_id,
                 tenant_id=tenant_id,
@@ -211,21 +235,8 @@ class TenantInitializationService:
 
             # Assign permissions to role
             for perm_pattern in role_data["permissions"]:
-                # Handle wildcards (e.g., "event:*" means all event permissions)
-                matching_perms: list[tuple[str, str]] = []
-                if perm_pattern.endswith(":*"):
-                    resource_prefix = perm_pattern[:-2]
-                    matching_perms = [
-                        (code, perm_id)
-                        for code, perm_id in permission_map.items()
-                        if code.startswith(resource_prefix + ":")
-                    ]
-                else:
-                    perm_id = permission_map.get(perm_pattern)
-                    if perm_id:
-                        matching_perms = [(perm_pattern, perm_id)]
-
-                for _, perm_id in matching_perms:
+                matching_perms = self._resolve_permission_pattern(perm_pattern, permission_map)
+                for perm_id in matching_perms:
                     role_permission = RolePermission(
                         id=generate_cuid(),
                         tenant_id=tenant_id,
@@ -234,23 +245,67 @@ class TenantInitializationService:
                     )
                     role_permissions.append(role_permission)
 
-        # Batch insert all roles and role-permissions
-        self.db.add_all(roles)
-        self.db.add_all(role_permissions)
-        await self.db.flush()
+        return roles, role_permissions, role_map
 
-        return role_map
+    @staticmethod
+    def _resolve_permission_pattern(
+        pattern: str, permission_map: dict[str, str]
+    ) -> list[str]:
+        """Resolve permission pattern (e.g., 'event:*') to list of permission IDs"""
+        if pattern.endswith(":*"):
+            resource_prefix = pattern[:-2]
+            return [
+                perm_id
+                for code, perm_id in permission_map.items()
+                if code.startswith(resource_prefix + ":")
+            ]
+        perm_id = permission_map.get(pattern)
+        return [perm_id] if perm_id else []
 
-    async def _assign_admin_role(
-        self, tenant_id: str, user_id: str, admin_role_id: str
-    ) -> None:
-        """Assign admin role to the specified user"""
-        user_role = UserRole(
+    @staticmethod
+    def _build_admin_assignment(tenant_id: str, user_id: str, admin_role_id: str) -> UserRole:
+        """Build admin role assignment entity"""
+        return UserRole(
             id=generate_cuid(),
             tenant_id=tenant_id,
             user_id=user_id,
             role_id=admin_role_id,
             assigned_by=user_id,  # Self-assigned for the first admin
         )
-        self.db.add(user_role)
-        await self.db.flush()
+
+    @staticmethod
+    def _build_audit_schema(tenant_id: str, created_by: str) -> EventSchema:
+        """
+        Build the system audit EventSchema for tracking all CRUD operations.
+
+        This schema is:
+        - Created once per tenant during initialization
+        - Activated immediately (is_active=True)
+        - Used by SystemAuditService for all audit events
+        """
+        return EventSchema(
+            id=generate_cuid(),
+            tenant_id=tenant_id,
+            event_type=SYSTEM_AUDIT_EVENT_TYPE,
+            schema_definition=get_system_audit_schema_definition(),
+            version=SYSTEM_AUDIT_SCHEMA_VERSION,
+            is_active=True,  # Auto-activate system schema
+            created_by=created_by,
+        )
+
+    @staticmethod
+    def _build_audit_subject(tenant_id: str) -> Subject:
+        """
+        Build the system audit Subject for the audit event chain.
+
+        This subject:
+        - Acts as the "subject" for all audit events in this tenant
+        - Has a reserved external_ref to identify it uniquely
+        - Enables hash chaining across all audit events
+        """
+        return Subject(
+            id=generate_cuid(),
+            tenant_id=tenant_id,
+            subject_type=SYSTEM_AUDIT_SUBJECT_TYPE,
+            external_ref=SYSTEM_AUDIT_SUBJECT_REF,
+        )

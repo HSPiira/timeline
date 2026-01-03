@@ -6,10 +6,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.enums import TenantStatus
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.persistence.database import get_db
 from src.infrastructure.persistence.repositories import (
-    TenantRepository, 
+    TenantRepository,
     UserRepository,
 )
 from src.infrastructure.security.jwt import create_access_token
@@ -44,7 +45,7 @@ async def login(
     tenant_repo = TenantRepository(db)
     tenant = await tenant_repo.get_by_code(token_request.tenant_code)
 
-    if not tenant or tenant.status != "active":
+    if not tenant or tenant.status != TenantStatus.ACTIVE.value:
         # Use generic error to prevent tenant enumeration
         logger.warning("Login attempt for invalid/inactive tenant: %s", token_request.tenant_code)
         raise HTTPException(

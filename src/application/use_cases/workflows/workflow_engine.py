@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
+from src.shared.enums import WorkflowExecutionStatus
 from src.shared.telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -31,7 +32,9 @@ class WorkflowEngine:
         self.db = db
         self.event_service = event_service
 
-    async def process_event_triggers(self, event: "Event", tenant_id: str) -> list["WorkflowExecution"]:
+    async def process_event_triggers(
+        self, event: "Event", tenant_id: str
+    ) -> list["WorkflowExecution"]:
         """
         Find and execute workflows triggered by event.
 
@@ -93,7 +96,9 @@ class WorkflowEngine:
 
         return True
 
-    async def _execute_workflow(self, workflow: "Workflow", triggered_by: "Event") -> "WorkflowExecution":
+    async def _execute_workflow(
+        self, workflow: "Workflow", triggered_by: "Event"
+    ) -> "WorkflowExecution":
         """Execute workflow actions"""
         from src.infrastructure.persistence.models.workflow import \
             WorkflowExecution
@@ -111,7 +116,7 @@ class WorkflowEngine:
             workflow_id=workflow.id,
             triggered_by_event_id=triggered_by.id,
             triggered_by_subject_id=triggered_by.subject_id,
-            status="running",
+            status=WorkflowExecutionStatus.RUNNING.value,
             started_at=datetime.now(UTC),
         )
 
@@ -173,7 +178,7 @@ class WorkflowEngine:
                     )
                     logger.warning("Unknown workflow action type: %s", action_type)
 
-            execution.status = "completed"
+            execution.status = WorkflowExecutionStatus.COMPLETED.value
             logger.info(
                 "Workflow execution %s completed: %d succeeded, %d failed",
                 execution.id,
@@ -181,7 +186,7 @@ class WorkflowEngine:
                 actions_failed
             )
         except Exception as e:
-            execution.status = "failed"
+            execution.status = WorkflowExecutionStatus.FAILED.value
             execution.error_message = str(e)
             logger.exception("Workflow execution %s failed", execution.id)
 

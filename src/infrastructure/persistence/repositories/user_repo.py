@@ -1,19 +1,48 @@
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.persistence.models.user import User
-from src.infrastructure.persistence.repositories.base import BaseRepository
+from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
 from src.infrastructure.security.password import (get_password_hash,
                                                   verify_password)
+from src.shared.enums import AuditAction
+
+if TYPE_CHECKING:
+    from src.application.services.system_audit_service import SystemAuditService
 
 
-class UserRepository(BaseRepository[User]):
-    """Repository for User operations (SRP - data access only)"""
+class UserRepository(AuditableRepository[User]):
+    """Repository for User operations with automatic audit tracking."""
 
-    def __init__(self, db: AsyncSession):
-        super().__init__(db, User)
+    def __init__(
+        self,
+        db: AsyncSession,
+        audit_service: "SystemAuditService | None" = None,
+        *,
+        enable_audit: bool = True,
+    ):
+        super().__init__(db, User, audit_service, enable_audit=enable_audit)
+
+    # Auditable implementation
+    def _get_entity_type(self) -> str:
+        return "user"
+
+    def _get_tenant_id(self, obj: User) -> str:
+        return obj.tenant_id
+
+    def _serialize_for_audit(self, obj: User) -> dict[str, Any]:
+        return {
+            "id": obj.id,
+            "username": obj.username,
+            "email": obj.email,
+            "is_active": obj.is_active,
+            # Note: hashed_password is automatically redacted by SystemAuditService
+        }
 
     async def get_by_username_and_tenant(self, username: str, tenant_id: str) -> User | None:
         """Get user by username within a specific tenant"""
@@ -79,22 +108,26 @@ class UserRepository(BaseRepository[User]):
         return await self.update(user)
 
     async def deactivate(self, user_id: str) -> User | None:
-        """Deactivate user account"""
+        """Deactivate user account with audit event."""
         user = await self.get_by_id(user_id)
         if not user:
             return None
 
         user.is_active = False
-        return await self.update(user)
+        updated = await self.update(user)
+        await self.emit_custom_audit(updated, AuditAction.DEACTIVATED)
+        return updated
 
     async def activate(self, user_id: str) -> User | None:
-        """Activate user account"""
+        """Activate user account with audit event."""
         user = await self.get_by_id(user_id)
         if not user:
             return None
 
         user.is_active = True
-        return await self.update(user)
+        updated = await self.update(user)
+        await self.emit_custom_audit(updated, AuditAction.ACTIVATED)
+        return updated
 
     async def get_users_by_tenant(
         self, tenant_id: str, skip: int = 0, limit: int = 100

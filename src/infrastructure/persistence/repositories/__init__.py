@@ -1,5 +1,6 @@
 """ Repository module for the persistence layer. """
 
+from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
 from src.infrastructure.persistence.repositories.base import BaseRepository
 from src.infrastructure.persistence.repositories.document_repo import DocumentRepository
 from src.infrastructure.persistence.repositories.event_repo import EventRepository
@@ -9,6 +10,7 @@ from src.infrastructure.persistence.repositories.tenant_repo import TenantReposi
 from src.infrastructure.persistence.repositories.user_repo import UserRepository
 
 __all__ = [
+    "AuditableRepository",
     "BaseRepository",
     "DocumentRepository",
     "EventRepository",

@@ -4,23 +4,24 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.params import Query
 from sqlalchemy.exc import IntegrityError
 
+from src.domain.enums import TenantStatus
 from src.infrastructure.persistence.models.tenant import Tenant
 from src.infrastructure.persistence.repositories import (
-    TenantRepository, 
+    TenantRepository,
     UserRepository,
 )
 from src.infrastructure.security.password import get_password_hash
 from src.presentation.api.dependencies import (
-    get_current_tenant, 
-    get_current_user, 
-    get_tenant_repo, 
-    get_user_repo, 
+    get_current_tenant,
+    get_current_user,
+    get_tenant_repo,
+    get_user_repo,
     get_user_repo_transactional,
 )
 from src.presentation.api.v1.schemas.token import TokenPayload
 from src.presentation.api.v1.schemas.user import (
-    UserCreate, 
-    UserResponse, 
+    UserCreate,
+    UserResponse,
     UserUpdate,
 )
 
@@ -38,7 +39,7 @@ async def register_user(
     if not tenant:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid tenant code")
 
-    if tenant.status != "active":
+    if tenant.status != TenantStatus.ACTIVE.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant is not active")
 
     try:

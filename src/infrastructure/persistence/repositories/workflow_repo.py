@@ -2,26 +2,49 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from datetime import UTC, datetime
 from src.infrastructure.persistence.models.workflow import (Workflow,
                                                             WorkflowExecution)
+from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
+from src.shared.enums import AuditAction
+
+if TYPE_CHECKING:
+    from src.application.services.system_audit_service import SystemAuditService
 
 
-class WorkflowRepository:
-    """Repository for Workflow model"""
+class WorkflowRepository(AuditableRepository[Workflow]):
+    """Repository for Workflow model with automatic audit tracking."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    def __init__(
+        self,
+        db: AsyncSession,
+        audit_service: "SystemAuditService | None" = None,
+        *,
+        enable_audit: bool = True,
+    ):
+        super().__init__(db, Workflow, audit_service, enable_audit=enable_audit)
 
-    async def create(self, workflow: Workflow) -> Workflow:
-        """Create new workflow"""
-        self.db.add(workflow)
-        await self.db.flush()
-        await self.db.refresh(workflow)
-        return workflow
+    # Auditable implementation
+    def _get_entity_type(self) -> str:
+        return "workflow"
+
+    def _get_tenant_id(self, obj: Workflow) -> str:
+        return obj.tenant_id
+
+    def _serialize_for_audit(self, obj: Workflow) -> dict[str, Any]:
+        return {
+            "id": obj.id,
+            "name": obj.name,
+            "description": obj.description,
+            "trigger_event_type": obj.trigger_event_type,
+            "is_active": obj.is_active,
+            "execution_order": obj.execution_order,
+        }
 
     async def get_by_id(self, workflow_id: str, tenant_id: str) -> Workflow | None:
         """Get workflow by ID and tenant"""
@@ -68,22 +91,39 @@ class WorkflowRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def update(self, workflow: Workflow) -> Workflow:
-        """Update workflow"""
-        await self.db.flush()
-        await self.db.refresh(workflow)
-        return workflow
-
     async def soft_delete(self, workflow_id: str, tenant_id: str) -> bool:
-        """Soft delete workflow"""
+        """Soft delete workflow with audit event."""
         workflow = await self.get_by_id(workflow_id, tenant_id)
         if not workflow:
             return False
 
-
         workflow.deleted_at = datetime.now(UTC)
         await self.db.flush()
+        # Emit deleted audit event
+        await self._emit_audit_event(AuditAction.DELETED, workflow)
         return True
+
+    async def activate(self, workflow_id: str, tenant_id: str) -> Workflow | None:
+        """Activate a workflow with audit event."""
+        workflow = await self.get_by_id(workflow_id, tenant_id)
+        if not workflow:
+            return None
+
+        workflow.is_active = True
+        await self.update(workflow)
+        await self.emit_custom_audit(workflow, AuditAction.ACTIVATED)
+        return workflow
+
+    async def deactivate(self, workflow_id: str, tenant_id: str) -> Workflow | None:
+        """Deactivate a workflow with audit event."""
+        workflow = await self.get_by_id(workflow_id, tenant_id)
+        if not workflow:
+            return None
+
+        workflow.is_active = False
+        await self.update(workflow)
+        await self.emit_custom_audit(workflow, AuditAction.DEACTIVATED)
+        return workflow
 
 
 class WorkflowExecutionRepository:

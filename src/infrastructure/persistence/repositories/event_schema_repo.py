@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,22 +8,58 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.cache.redis_cache import CacheService
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.persistence.models.event_schema import EventSchema
-from src.infrastructure.persistence.repositories.base import BaseRepository
+from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
+from src.shared.enums import AuditAction
+
+if TYPE_CHECKING:
+    from src.application.services.system_audit_service import SystemAuditService
 
 
-class EventSchemaRepository(BaseRepository[EventSchema]):
+class EventSchemaRepository(AuditableRepository[EventSchema]):
     """
-    Repository for EventSchema entity with Redis caching
+    Repository for EventSchema entity with Redis caching and audit tracking.
 
     Performance: 90% reduction in schema lookups via Redis cache
     Cache TTL: 10 minutes (configurable)
     """
 
-    def __init__(self, db: AsyncSession, cache_service: CacheService | None = None):
-        super().__init__(db, EventSchema)
+    def __init__(
+        self,
+        db: AsyncSession,
+        cache_service: CacheService | None = None,
+        audit_service: "SystemAuditService | None" = None,
+        *,
+        enable_audit: bool = True,
+    ):
+        super().__init__(db, EventSchema, audit_service, enable_audit=enable_audit)
         self.cache = cache_service
         self.settings = get_settings()
         self.cache_ttl = self.settings.cache_ttl_schemas
+
+    # Auditable implementation
+    def _get_entity_type(self) -> str:
+        return "event_schema"
+
+    def _get_tenant_id(self, obj: EventSchema) -> str:
+        return obj.tenant_id
+
+    def _serialize_for_audit(self, obj: EventSchema) -> dict[str, Any]:
+        return {
+            "id": obj.id,
+            "event_type": obj.event_type,
+            "version": obj.version,
+            "is_active": obj.is_active,
+            "created_by": obj.created_by,
+        }
+
+    # Override hooks for cache invalidation
+    async def _on_after_create(self, obj: EventSchema) -> None:
+        await super()._on_after_create(obj)
+        await self._invalidate_schema_cache(obj.tenant_id, obj.event_type)
+
+    async def _on_after_update(self, obj: EventSchema) -> None:
+        await super()._on_after_update(obj)
+        await self._invalidate_schema_cache(obj.tenant_id, obj.event_type)
 
     async def get_next_version(self, tenant_id: str, event_type: str) -> int:
         """Get the next version number for an event_type (auto-increment)"""
@@ -132,24 +168,22 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
         return list(result.scalars().all())
 
     async def deactivate_schema(self, schema_id: str) -> EventSchema | None:
-        """Deactivate a schema and invalidate cache"""
+        """Deactivate a schema with audit event (cache invalidated via hook)."""
         schema = await self.get_by_id(schema_id)
         if schema:
             schema.is_active = False
             updated = await self.update(schema)
-            # Invalidate cache
-            await self._invalidate_schema_cache(str(schema.tenant_id), str(schema.event_type))
+            await self.emit_custom_audit(updated, AuditAction.DEACTIVATED)
             return updated
         return None
 
     async def activate_schema(self, schema_id: str) -> EventSchema | None:
-        """Activate a schema and invalidate cache"""
+        """Activate a schema with audit event (cache invalidated via hook)."""
         schema = await self.get_by_id(schema_id)
         if schema:
             schema.is_active = True
             updated = await self.update(schema)
-            # Invalidate cache
-            await self._invalidate_schema_cache(str(schema.tenant_id), str(schema.event_type))
+            await self.emit_custom_audit(updated, AuditAction.ACTIVATED)
             return updated
         return None
 

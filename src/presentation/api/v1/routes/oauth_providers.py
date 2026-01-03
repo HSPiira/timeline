@@ -25,6 +25,7 @@ from src.presentation.api.v1.schemas.oauth_provider import (
     OAuthProviderHealthCheck, OAuthProviderListResponse, OAuthProviderMetadata,
     OAuthRotateCredentialsRequest, OAuthRotateCredentialsResponse)
 from src.presentation.api.v1.schemas.token import TokenPayload
+from src.shared.enums import OAuthStatus
 from src.shared.telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -544,7 +545,7 @@ async def oauth_callback(
         email_account.oauth_provider_config_id = config.id
         email_account.oauth_provider_config_version = config.version
         email_account.granted_scopes = tokens.scope.split(" ") if tokens.scope else []
-        email_account.oauth_status = "active"
+        email_account.oauth_status = OAuthStatus.ACTIVE.value
         email_account.oauth_error_count = 0
         email_account.oauth_next_retry_at = None
         email_account.last_auth_error = None
@@ -563,7 +564,7 @@ async def oauth_callback(
             oauth_provider_config_id=config.id,
             oauth_provider_config_version=config.version,
             granted_scopes=tokens.scope.split(" ") if tokens.scope else [],
-            oauth_status="active",
+            oauth_status=OAuthStatus.ACTIVE.value,
             token_last_refreshed_at=datetime.now(UTC),
         )
         db.add(email_account)
