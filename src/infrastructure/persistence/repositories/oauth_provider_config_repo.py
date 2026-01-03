@@ -3,22 +3,50 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.persistence.models.oauth_provider_config import (
     OAuthAuditLog, OAuthProviderConfig, OAuthState)
-from src.infrastructure.persistence.repositories.base import BaseRepository
+from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
+from src.shared.enums import AuditAction
 from src.shared.utils.generators import generate_cuid
 
+if TYPE_CHECKING:
+    from src.application.services.system_audit_service import SystemAuditService
 
-class OAuthProviderConfigRepository(BaseRepository[OAuthProviderConfig]):
-    """Repository for OAuth provider configuration with versioning support"""
 
-    def __init__(self, db: AsyncSession):
-        super().__init__(db, OAuthProviderConfig)
+class OAuthProviderConfigRepository(AuditableRepository[OAuthProviderConfig]):
+    """Repository for OAuth provider configuration with versioning support and audit tracking."""
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        audit_service: "SystemAuditService | None" = None,
+        *,
+        enable_audit: bool = True,
+    ):
+        super().__init__(db, OAuthProviderConfig, audit_service, enable_audit=enable_audit)
+
+    # Auditable implementation
+    def _get_entity_type(self) -> str:
+        return "oauth_provider"
+
+    def _get_tenant_id(self, obj: OAuthProviderConfig) -> str:
+        return obj.tenant_id
+
+    def _serialize_for_audit(self, obj: OAuthProviderConfig) -> dict[str, Any]:
+        return {
+            "id": obj.id,
+            "provider_type": obj.provider_type,
+            "display_name": obj.display_name,
+            "version": obj.version,
+            "is_active": obj.is_active,
+            "health_status": obj.health_status,
+            # Note: encrypted credentials are excluded for security
+        }
 
     async def get_active_config(
         self, tenant_id: str, provider_type: str
@@ -147,10 +175,21 @@ class OAuthProviderConfigRepository(BaseRepository[OAuthProviderConfig]):
                 created_by=created_by,
             )
 
-        # self.db.add(new_config)
-        # await self.db.flush()
-        # await self.db.refresh(new_config)
         await self.create(new_config)
+
+        # Emit custom audit for credential rotation if this is a version upgrade
+        if current:
+            await self.emit_custom_audit(
+                new_config,
+                AuditAction.STATUS_CHANGED,
+                metadata={
+                    "operation": "credential_rotation",
+                    "previous_version": current.version,
+                    "new_version": new_config.version,
+                    "previous_config_id": current.id,
+                },
+            )
+
         return new_config
 
     async def increment_connection_count(self, config_id: str) -> bool:

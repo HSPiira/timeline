@@ -3,6 +3,9 @@ Auditable Repository base class for automatic system event tracking.
 
 Extends BaseRepository with hooks that automatically emit audit events
 for all CRUD operations on entities that should be tracked.
+
+Uses request-scoped context (via contextvars) to automatically capture
+the current user as the actor for audit events.
 """
 
 from __future__ import annotations
@@ -12,7 +15,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.infrastructure.persistence.database import Base
 from src.infrastructure.persistence.repositories.base import BaseRepository
-from src.shared.enums import AuditAction
+from src.shared.context import get_current_actor_id, get_current_actor_type
+from src.shared.enums import ActorType, AuditAction
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,8 +91,22 @@ class AuditableRepository(BaseRepository[ModelType]):
 
     # Optional overrides
     def _get_actor_id(self) -> str | None:
-        """Return the current actor ID. Override to provide user context."""
-        return None
+        """
+        Return the current actor ID from request context.
+
+        Uses contextvars to get the user set during request processing.
+        Override this method to provide custom actor resolution logic.
+        """
+        return get_current_actor_id()
+
+    def _get_actor_type(self) -> ActorType:
+        """
+        Return the current actor type from request context.
+
+        Uses contextvars to get the actor type set during request processing.
+        Defaults to SYSTEM if no context is set.
+        """
+        return get_current_actor_type()
 
     def _should_audit(self, action: AuditAction, obj: ModelType) -> bool:
         """Return whether this operation should be audited. Override to filter."""
@@ -117,6 +135,7 @@ class AuditableRepository(BaseRepository[ModelType]):
                 entity_id=getattr(obj, "id", str(obj)),
                 entity_data=self._serialize_for_audit(obj),
                 actor_id=self._get_actor_id(),
+                actor_type=self._get_actor_type(),
                 metadata=metadata,
             )
         except Exception as e:

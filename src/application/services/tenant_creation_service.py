@@ -78,10 +78,17 @@ class TenantCreationService:
         )
         created_tenant = await self.tenant_repo.create(tenant)
 
+        # Initialize RBAC first (creates audit subject needed for user audit events)
+        # Note: We pass a placeholder user_id since admin user doesn't exist yet.
+        # The admin role assignment is handled separately after user creation.
+        await self.init_service.initialize_tenant_infrastructure(
+            tenant_id=created_tenant.id,
+        )
+
         # Generate secure password if not provided
         password = admin_password or self._generate_secure_password()
 
-        # Create admin user
+        # Create admin user (now audit subject exists for audit events)
         admin_username = "admin"
         admin_email = f"admin@{code}.tl"
         admin_user = await self.user_repo.create_user(
@@ -91,8 +98,8 @@ class TenantCreationService:
             password=password,
         )
 
-        # Initialize RBAC (permissions, roles, admin assignment)
-        await self.init_service.initialize_tenant(
+        # Complete initialization by assigning admin role
+        await self.init_service.assign_admin_role(
             tenant_id=created_tenant.id,
             admin_user_id=admin_user.id,
         )

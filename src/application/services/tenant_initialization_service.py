@@ -151,6 +151,73 @@ class TenantInitializationService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        self._role_map: dict[str, str] = {}
+
+    async def initialize_tenant_infrastructure(self, tenant_id: str) -> None:
+        """
+        Initialize tenant infrastructure (Phase 1).
+
+        Creates in order:
+        1. System audit schema and subject (needed for audit events)
+        2. Permissions
+        3. Roles (flush to get IDs)
+        4. Role-permission assignments
+
+        Must be called BEFORE creating users so audit events can be tracked.
+        """
+        # Build system audit infrastructure first
+        # Note: created_by is None for system-created schemas (no user exists yet)
+        audit_schema = self._build_audit_schema(tenant_id, created_by=None)
+        audit_subject = self._build_audit_subject(tenant_id)
+
+        # Insert audit infrastructure first (needed for any audit events)
+        self.db.add(audit_schema)
+        self.db.add(audit_subject)
+        await self.db.flush()
+
+        # Build permissions and roles
+        permissions, permission_map = self._build_permissions(tenant_id)
+        roles, role_permissions, role_map = self._build_roles(tenant_id, permission_map)
+
+        # Store role map for later admin assignment
+        self._role_map = role_map
+
+        # Insert permissions first
+        self.db.add_all(permissions)
+        await self.db.flush()
+
+        # Insert roles
+        self.db.add_all(roles)
+        await self.db.flush()
+
+        # Now insert role-permission assignments (roles exist now)
+        self.db.add_all(role_permissions)
+        await self.db.flush()
+
+    async def assign_admin_role(self, tenant_id: str, admin_user_id: str) -> None:
+        """
+        Assign admin role to a user (Phase 2).
+
+        Must be called AFTER initialize_tenant_infrastructure and user creation.
+        """
+        if "admin" not in self._role_map:
+            # Role map not populated - need to look up the admin role
+            from sqlalchemy import select
+
+            from src.infrastructure.persistence.models.role import Role
+
+            result = await self.db.execute(
+                select(Role.id).where(Role.tenant_id == tenant_id, Role.code == "admin")
+            )
+            admin_role_id = result.scalar_one_or_none()
+            if not admin_role_id:
+                raise ValueError(f"Admin role not found for tenant {tenant_id}")
+        else:
+            admin_role_id = self._role_map["admin"]
+
+        user_role = self._build_admin_assignment(tenant_id, admin_user_id, admin_role_id)
+        self.db.add(user_role)
+        await self.db.flush()
 
     async def initialize_tenant(self, tenant_id: str, admin_user_id: str) -> InitializationResult:
         """
@@ -161,25 +228,33 @@ class TenantInitializationService:
         - System audit schema for tracking all CRUD operations
         - System audit subject for audit event chain
 
-        Uses a single flush at the end for optimal database performance.
-        Returns a dict with created entities count.
+        NOTE: This method is kept for backwards compatibility but should be avoided
+        when audit events need to be captured during user creation. Use the two-phase
+        approach: initialize_tenant_infrastructure() -> create user -> assign_admin_role()
         """
-        # Collect all entities to insert
+        # Build system audit infrastructure first
+        audit_schema = self._build_audit_schema(tenant_id, admin_user_id)
+        audit_subject = self._build_audit_subject(tenant_id)
+
+        # Insert audit infrastructure first
+        self.db.add(audit_schema)
+        self.db.add(audit_subject)
+        await self.db.flush()
+
+        # Build permissions and roles
         permissions, permission_map = self._build_permissions(tenant_id)
         roles, role_permissions, role_map = self._build_roles(tenant_id, permission_map)
         user_role = self._build_admin_assignment(tenant_id, admin_user_id, role_map["admin"])
 
-        # Build system audit infrastructure
-        audit_schema = self._build_audit_schema(tenant_id, admin_user_id)
-        audit_subject = self._build_audit_subject(tenant_id)
-
-        # Batch insert all entities with single flush
+        # Insert in correct order with flushes to ensure foreign keys exist
         self.db.add_all(permissions)
+        await self.db.flush()
+
         self.db.add_all(roles)
+        await self.db.flush()
+
         self.db.add_all(role_permissions)
         self.db.add(user_role)
-        self.db.add(audit_schema)
-        self.db.add(audit_subject)
         await self.db.flush()
 
         return {
@@ -274,7 +349,7 @@ class TenantInitializationService:
         )
 
     @staticmethod
-    def _build_audit_schema(tenant_id: str, created_by: str) -> EventSchema:
+    def _build_audit_schema(tenant_id: str, created_by: str | None) -> EventSchema:
         """
         Build the system audit EventSchema for tracking all CRUD operations.
 
@@ -282,6 +357,9 @@ class TenantInitializationService:
         - Created once per tenant during initialization
         - Activated immediately (is_active=True)
         - Used by SystemAuditService for all audit events
+
+        Note: created_by can be None for system-generated schemas during
+        tenant bootstrap (before any user exists).
         """
         return EventSchema(
             id=generate_cuid(),
