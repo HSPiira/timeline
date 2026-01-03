@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Storage
     storage_backend: str = "local"  # Options: "local", "s3"
     storage_root: str = "/var/timeline/storage"  # For local backend
+    storage_base_url: str | None = None  # Base URL for download links (e.g., "https://api.example.com")
     s3_bucket: str | None = None  # Required for S3 backend
     s3_region: str = "us-east-1"
     s3_endpoint_url: str | None = None  # For MinIO/LocalStack

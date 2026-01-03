@@ -114,7 +114,7 @@ class VerificationService:
                 event_results=[],
             )
 
-        event_results = []
+        event_results: list[VerificationResult] = []
         valid_count = 0
         invalid_count = 0
 
@@ -167,7 +167,7 @@ class VerificationService:
             )
 
         # Group events by subject for proper chain verification
-        events_by_subject: dict[str, list[Event]] = {}
+        events_by_subject: dict[str, list["Event"]] = {}
         for event in events:
             if event.subject_id not in events_by_subject:
                 events_by_subject[event.subject_id] = []
@@ -179,7 +179,7 @@ class VerificationService:
                 events_by_subject[subject_id], key=lambda e: e.event_time
             )
 
-        all_results = []
+        all_results: list[VerificationResult] = []
         valid_count = 0
         invalid_count = 0
 
@@ -262,7 +262,7 @@ class VerificationService:
                     error_message=(
                         f"Genesis event should have null previous_hash, got: "
                         f"{event.previous_hash}"
-                        ),
+                    ),
                     expected_hash=None,
                     actual_hash=event.previous_hash,
                 )

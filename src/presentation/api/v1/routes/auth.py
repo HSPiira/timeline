@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -80,7 +80,7 @@ async def login(
             "sub": user.id,  # User ID (subject)
             "tenant_id": tenant.id,  # Tenant ID claim - prevents spoofing
             "username": user.username,  # Add username for logging
-            "iat": datetime.utcnow(),  # Issued at timestamp
+            "iat": datetime.now(UTC),  # Issued at timestamp
         },
         expires_delta=access_token_expires,
     )
@@ -116,7 +116,7 @@ if settings.debug and os.getenv("ENABLE_TEST_AUTH") == "true":
                 "sub": user_id,
                 "tenant_id": tenant_id,
                 "test_token": True,  # Mark as test token
-                "iat": datetime.utcnow(),
+                "iat": datetime.now(UTC),
             }
         )
 

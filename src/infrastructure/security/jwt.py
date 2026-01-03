@@ -29,8 +29,6 @@ def verify_token(token: str) -> dict[str, Any]:
     """Verify and decode JWT token, returns payload"""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        if not isinstance(payload, dict):
-            raise TypeError("Token payload must be a dictionary")
         return payload
     except JWTError as e:
         raise ValueError(f"Invalid token: {str(e)}") from e

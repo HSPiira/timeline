@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from src.infrastructure.external.email.protocols import (
     EmailProviderConfig,
-    IEmailProvider,
+    IEmailProvider
 )
 from src.infrastructure.external.email.providers import (
     GmailProvider,

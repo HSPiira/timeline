@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,7 +75,7 @@ class EventSchemaRepository(BaseRepository[EventSchema]):
 
         # Cache for future requests (convert to dict for JSON serialization)
         if schema and self.cache and self.cache.is_available():
-            schema_dict = {
+            schema_dict: dict[str, Any] = {
                 "id": schema.id,
                 "tenant_id": schema.tenant_id,
                 "event_type": schema.event_type,

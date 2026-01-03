@@ -3,9 +3,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.persistence.models.permission import (Permission,
-                                                              RolePermission,
-                                                              UserRole)
+from src.infrastructure.persistence.models.permission import (
+    Permission, RolePermission, UserRole)
 from src.infrastructure.persistence.repositories.base import BaseRepository
 
 

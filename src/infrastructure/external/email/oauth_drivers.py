@@ -57,42 +57,45 @@ class OAuthDriver(ABC):
         client_secret: str,
         redirect_uri: str,
         scopes: list[str],
-    ):
+    ) -> None:
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.scopes = scopes
 
+    # Subclasses should define these as class variables
+    PROVIDER_NAME: ClassVar[str]
+    PROVIDER_TYPE: ClassVar[str]
+    AUTHORIZATION_ENDPOINT: ClassVar[str]
+    TOKEN_ENDPOINT: ClassVar[str]
+    SUPPORTS_PKCE: ClassVar[bool] = False
+
     @property
-    @abstractmethod
     def provider_name(self) -> str:
         """Human-readable provider name"""
-        pass
+        return self.PROVIDER_NAME
 
     @property
-    @abstractmethod
     def provider_type(self) -> str:
         """Provider identifier (gmail, outlook, yahoo)"""
-        pass
+        return self.PROVIDER_TYPE
 
     @property
-    @abstractmethod
     def authorization_endpoint(self) -> str:
         """OAuth authorization URL"""
-        pass
+        return self.AUTHORIZATION_ENDPOINT
 
     @property
-    @abstractmethod
     def token_endpoint(self) -> str:
         """OAuth token exchange URL"""
-        pass
+        return self.TOKEN_ENDPOINT
 
     @property
     def supports_pkce(self) -> bool:
         """Whether provider supports PKCE"""
-        return False
+        return self.SUPPORTS_PKCE
 
-    def build_authorization_url(self, state: str, **extra_params) -> str:
+    def build_authorization_url(self, state: str, **extra_params: Any) -> str:
         """
         Build OAuth authorization URL.
 
@@ -103,7 +106,7 @@ class OAuthDriver(ABC):
         Returns:
             Complete authorization URL for user redirect
         """
-        params = {
+        params: dict[str, Any] = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
@@ -120,7 +123,7 @@ class OAuthDriver(ABC):
         """Provider-specific authorization parameters"""
         pass
 
-    async def exchange_code_for_tokens(self, code: str, **extra_params) -> OAuthTokens:
+    async def exchange_code_for_tokens(self, code: str, **extra_params: Any) -> OAuthTokens:
         """
         Exchange authorization code for tokens.
 
@@ -151,7 +154,7 @@ class OAuthDriver(ABC):
                 logger.error(f"{self.provider_name} token exchange failed: {response.text}")
                 raise ValueError(f"Token exchange failed: {response.status_code} {response.text}")
 
-            token_data = response.json()
+            token_data: dict[str, Any] = response.json()
             return self._normalize_token_response(token_data)
 
     async def refresh_access_token(self, refresh_token: str) -> OAuthTokens:
@@ -182,7 +185,7 @@ class OAuthDriver(ABC):
                 logger.error(f"{self.provider_name} token refresh failed: {response.text}")
                 raise ValueError(f"Token refresh failed: {response.status_code} {response.text}")
 
-            token_data = response.json()
+            token_data: dict[str, Any] = response.json()
             tokens = self._normalize_token_response(token_data)
 
             # Some providers don't return new refresh token - reuse existing
@@ -196,7 +199,7 @@ class OAuthDriver(ABC):
         """Retrieve user information using access token"""
         pass
 
-    def _normalize_token_response(self, token_data: dict) -> OAuthTokens:
+    def _normalize_token_response(self, token_data: dict[str, Any]) -> OAuthTokens:
         """Normalize provider token response to standard format"""
         expires_in = token_data.get("expires_in", 3600)
         expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
@@ -215,10 +218,10 @@ class OAuthDriver(ABC):
 class GmailDriver(OAuthDriver):
     """Gmail/Google OAuth driver"""
 
-    provider_name = "Gmail"
-    provider_type = "gmail"
-    authorization_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
-    token_endpoint = "https://oauth2.googleapis.com/token"
+    PROVIDER_NAME = "Gmail"
+    PROVIDER_TYPE = "gmail"
+    AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+    TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 
     def _get_authorization_params(self) -> dict[str, Any]:
         """Gmail-specific: access_type=offline, prompt=consent for refresh token"""
@@ -239,7 +242,7 @@ class GmailDriver(OAuthDriver):
             if response.status_code != 200:
                 raise ValueError(f"Failed to get user info: {response.text}")
 
-            data = response.json()
+            data: dict[str, Any] = response.json()
             return OAuthUserInfo(
                 email=data["email"],
                 name=data.get("name"),
@@ -252,10 +255,10 @@ class GmailDriver(OAuthDriver):
 class OutlookDriver(OAuthDriver):
     """Microsoft Outlook/Office 365 OAuth driver"""
 
-    provider_name = "Microsoft 365"
-    provider_type = "outlook"
-    authorization_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-    token_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    PROVIDER_NAME = "Microsoft 365"
+    PROVIDER_TYPE = "outlook"
+    AUTHORIZATION_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    TOKEN_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
     def _get_authorization_params(self) -> dict[str, Any]:
         """Outlook-specific: response_mode, offline_access scope"""
@@ -274,7 +277,7 @@ class OutlookDriver(OAuthDriver):
             if response.status_code != 200:
                 raise ValueError(f"Failed to get user info: {response.text}")
 
-            data = response.json()
+            data: dict[str, Any] = response.json()
             email = data.get("mail") or data.get("userPrincipalName")
             if not email:
                 raise ValueError("Microsoft account has no email address configured")
@@ -290,10 +293,10 @@ class OutlookDriver(OAuthDriver):
 class YahooDriver(OAuthDriver):
     """Yahoo Mail OAuth driver"""
 
-    provider_name = "Yahoo Mail"
-    provider_type = "yahoo"
-    authorization_endpoint = "https://api.login.yahoo.com/oauth2/request_auth"
-    token_endpoint = "https://api.login.yahoo.com/oauth2/get_token"
+    PROVIDER_NAME = "Yahoo Mail"
+    PROVIDER_TYPE = "yahoo"
+    AUTHORIZATION_ENDPOINT = "https://api.login.yahoo.com/oauth2/request_auth"
+    TOKEN_ENDPOINT = "https://api.login.yahoo.com/oauth2/get_token"
 
     def _get_authorization_params(self) -> dict[str, Any]:
         """Yahoo-specific parameters"""
@@ -310,7 +313,7 @@ class YahooDriver(OAuthDriver):
             if response.status_code != 200:
                 raise ValueError(f"Failed to get user info: {response.text}")
 
-            data = response.json()
+            data: dict[str, Any] = response.json()
             return OAuthUserInfo(
                 email=data["email"],
                 name=data.get("name"),
@@ -334,7 +337,7 @@ class OAuthDriverRegistry:
     }
 
     @classmethod
-    def register(cls, provider_type: str, driver_class: type[OAuthDriver]):
+    def register(cls, provider_type: str, driver_class: type[OAuthDriver]) -> None:
         """Register a new OAuth driver"""
         cls._drivers[provider_type] = driver_class
         logger.info(f"Registered OAuth driver: {provider_type}")
@@ -386,9 +389,9 @@ class OAuthDriverRegistry:
 
         driver_class = cls._drivers[provider_type]
         return {
-            "provider_type": driver_class.provider_type,
-            "provider_name": driver_class.provider_name,
-            "authorization_endpoint": driver_class.authorization_endpoint,
-            "token_endpoint": driver_class.token_endpoint,
-            "supports_pkce": getattr(driver_class, "supports_pkce", False),
+            "provider_type": driver_class.PROVIDER_TYPE,
+            "provider_name": driver_class.PROVIDER_NAME,
+            "authorization_endpoint": driver_class.AUTHORIZATION_ENDPOINT,
+            "token_endpoint": driver_class.TOKEN_ENDPOINT,
+            "supports_pkce": driver_class.SUPPORTS_PKCE,
         }

@@ -6,7 +6,7 @@ Orchestrates event creation with cryptographic chaining and schema validation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import jsonschema
 
@@ -31,11 +31,11 @@ class EventService:
 
     def __init__(
         self,
-        event_repo: IEventRepository,
-        hash_service: IHashService,
-        subject_repo: ISubjectRepository,
-        schema_repo: IEventSchemaRepository | None = None,
-        workflow_engine: WorkflowEngine | None = None,
+        event_repo: "IEventRepository",
+        hash_service: "IHashService",
+        subject_repo: "ISubjectRepository",
+        schema_repo: "IEventSchemaRepository | None" = None,
+        workflow_engine: "WorkflowEngine | None" = None,
     ) -> None:
         self.event_repo = event_repo
         self.hash_service = hash_service
@@ -44,8 +44,8 @@ class EventService:
         self.workflow_engine = workflow_engine
 
     async def create_event(
-        self, tenant_id: str, event: EventCreate, *, trigger_workflows: bool = True
-    ) -> Event:
+        self, tenant_id: str, event: "EventCreate", *, trigger_workflows: bool = True
+    ) -> "Event":
         """
         Create a new event with cryptographic chaining and schema validation.
 
@@ -103,7 +103,7 @@ class EventService:
 
         return created_event
 
-    async def _trigger_workflows(self, event: Event, tenant_id: str) -> list[WorkflowExecution]:
+    async def _trigger_workflows(self, event: "Event", tenant_id: str) -> list["WorkflowExecution"]:
         """
         Trigger workflows for created event.
 
@@ -136,7 +136,7 @@ class EventService:
             return []
 
     async def _validate_payload(
-        self, tenant_id: str, event_type: str, schema_version: int, payload: dict
+        self, tenant_id: str, event_type: str, schema_version: int, payload: dict[str, Any]
     ) -> None:
         """
         Validate event payload against specific schema version.

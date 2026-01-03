@@ -30,7 +30,7 @@ class EmailProviderConfig:
     email_address: str
     credentials: dict[str, Any]  # provider-specific credentials
     connection_params: dict[str, Any] = field(
-        default_factory=dict
+        default_factory=lambda: {}
     )  # optional connection parameters
 
 

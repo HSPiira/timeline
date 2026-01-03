@@ -8,6 +8,7 @@ import hmac
 import json
 import secrets
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from cryptography.fernet import Fernet
 
@@ -83,7 +84,7 @@ class EnvelopeEncryptor:
         expected = self._sign_payload(payload)
         return hmac.compare_digest(expected, signature)
 
-    def encrypt(self, data: str | dict) -> str:
+    def encrypt(self, data: str | dict[str, Any]) -> str:
         """
         Encrypt data using envelope encryption.
 
@@ -131,7 +132,7 @@ class EnvelopeEncryptor:
             logger.error(f"Encryption failed: {e}", exc_info=True)
             raise ValueError(f"Encryption failed: {e}") from e
 
-    def decrypt(self, encrypted_envelope: str) -> str | dict:
+    def decrypt(self, encrypted_envelope: str) -> str | dict[str, Any]:
         """
         Decrypt data from envelope.
 
@@ -173,7 +174,7 @@ class EnvelopeEncryptor:
             try:
                 result = json.loads(data_str)
                 if isinstance(result, dict):
-                    return result
+                    return cast(dict[str, Any], result)
                 return data_str
             except json.JSONDecodeError:
                 return data_str

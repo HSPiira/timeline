@@ -7,7 +7,7 @@ Executes workflows triggered by events.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
@@ -27,11 +27,11 @@ logger = get_logger(__name__)
 class WorkflowEngine:
     """Execute workflows triggered by events"""
 
-    def __init__(self, db: AsyncSession, event_service: EventService):
+    def __init__(self, db: "AsyncSession", event_service: "EventService"):
         self.db = db
         self.event_service = event_service
 
-    async def process_event_triggers(self, event: Event, tenant_id: str) -> list[WorkflowExecution]:
+    async def process_event_triggers(self, event: "Event", tenant_id: str) -> list["WorkflowExecution"]:
         """
         Find and execute workflows triggered by event.
 
@@ -48,7 +48,7 @@ class WorkflowEngine:
             event_type=event.event_type, tenant_id=tenant_id
         )
 
-        executions = []
+        executions: list["WorkflowExecution"] = []
         for workflow in workflows:
             # Check conditions
             if not self._evaluate_conditions(workflow, event):
@@ -60,7 +60,7 @@ class WorkflowEngine:
 
         return executions
 
-    async def _find_matching_workflows(self, event_type: str, tenant_id: str) -> list[Workflow]:
+    async def _find_matching_workflows(self, event_type: str, tenant_id: str) -> list["Workflow"]:
         """Find active workflows for event type"""
         from src.infrastructure.persistence.models.workflow import Workflow
 
@@ -78,7 +78,7 @@ class WorkflowEngine:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    def _evaluate_conditions(self, workflow: Workflow, event: Event) -> bool:
+    def _evaluate_conditions(self, workflow: "Workflow", event: "Event") -> bool:
         """Check if event matches workflow conditions"""
         if not workflow.trigger_conditions:
             return True  # No conditions = always match
@@ -93,7 +93,7 @@ class WorkflowEngine:
 
         return True
 
-    async def _execute_workflow(self, workflow: Workflow, triggered_by: Event) -> WorkflowExecution:
+    async def _execute_workflow(self, workflow: "Workflow", triggered_by: "Event") -> "WorkflowExecution":
         """Execute workflow actions"""
         from src.infrastructure.persistence.models.workflow import \
             WorkflowExecution
@@ -118,7 +118,7 @@ class WorkflowEngine:
         self.db.add(execution)
         await self.db.flush()
 
-        execution_log = []
+        execution_log: list[dict[str, Any]] = []
         actions_executed = 0
         actions_failed = 0
 
@@ -183,7 +183,7 @@ class WorkflowEngine:
         except Exception as e:
             execution.status = "failed"
             execution.error_message = str(e)
-            logger.exception("Workflow execution %s failed: %s", execution.id, str(e))
+            logger.exception("Workflow execution %s failed", execution.id)
 
         execution.completed_at = datetime.now(UTC)
         execution.actions_executed = actions_executed

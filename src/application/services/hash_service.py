@@ -9,6 +9,7 @@ import hashlib
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Any
 
 
 class HashAlgorithm(ABC):
@@ -44,7 +45,7 @@ class HashService:
         self.algorithm = algorithm or SHA256Algorithm()
 
     @staticmethod
-    def canonical_json(data: dict) -> str:
+    def canonical_json(data: dict[str, Any]) -> str:
         """Convert a dictionary to a canonical JSON string"""
         return json.dumps(data, sort_keys=True, separators=(",", ":"))
 
@@ -54,7 +55,7 @@ class HashService:
         subject_id: str,
         event_type: str,
         event_time: datetime,
-        payload: dict,
+        payload: dict[str, Any],
         previous_hash: str | None,
     ) -> str:
         """Compute hash for event data using configured algorithm"""

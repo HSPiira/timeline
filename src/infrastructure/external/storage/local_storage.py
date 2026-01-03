@@ -12,23 +12,25 @@ Security Features:
 import hashlib
 import json
 import os
+import secrets
 import tempfile
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, cast
 
 import aiofiles
 import aiofiles.os
 
-from src.infrastructure.exceptions import (StorageAlreadyExistsError,
-                                           StorageChecksumMismatchError,
-                                           StorageDeleteError,
-                                           StorageDownloadError,
-                                           StorageNotFoundError,
-                                           StorageNotSupportedError,
-                                           StoragePermissionError,
-                                           StorageUploadError)
+from src.infrastructure.exceptions import (
+    StorageAlreadyExistsError,
+    StorageChecksumMismatchError,
+    StorageDeleteError,
+    StorageDownloadError,
+    StorageNotFoundError,
+    StoragePermissionError,
+    StorageUploadError,
+)
 
 
 class LocalStorageService:
@@ -44,18 +46,25 @@ class LocalStorageService:
     - Checksums validated on upload
     - File permissions: 0o640 (owner rw, group r)
     - Directory permissions: 0o750 (owner rwx, group rx)
+    - Pre-signed URLs with expiration for secure temporary access
     """
 
     CHUNK_SIZE = 64 * 1024  # 64KB chunks for streaming
 
-    def __init__(self, storage_root: str):
+    # Token storage: {token: (storage_ref, expires_at)}
+    _download_tokens: dict[str, tuple[str, datetime]] = {}
+
+    def __init__(self, storage_root: str, base_url: str | None = None) -> None:
         """
         Initialize local storage service.
 
         Args:
             storage_root: Base directory for all file storage
+            base_url: Base URL for download endpoints (e.g., "https://api.example.com")
+                     If None, returns relative path
         """
         self.storage_root = Path(storage_root).resolve()
+        self.base_url = base_url.rstrip("/") if base_url else None
 
         # Create storage root if it doesn't exist
         self.storage_root.mkdir(parents=True, exist_ok=True, mode=0o750)
@@ -141,7 +150,7 @@ class LocalStorageService:
             result = json.loads(content)
             if not isinstance(result, dict):
                 return {}
-            return result
+            return cast(dict[str, Any], result)
 
     async def upload(
         self,
@@ -194,14 +203,12 @@ class LocalStorageService:
                         "checksum": existing_checksum,
                         "size": target_path.stat().st_size,
                         "uploaded_at": existing_metadata.get(
-                            "uploaded_at", datetime.utcnow().isoformat()
+                            "uploaded_at", datetime.now(UTC).isoformat()
                         ),
                     }
                 else:
                     # File exists with different checksum
-                    raise StorageAlreadyExistsError(
-                        f"File exists at {storage_ref} with different checksum"
-                    )
+                    raise StorageAlreadyExistsError(storage_ref)
 
             # Create parent directories
             target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
@@ -229,29 +236,31 @@ class LocalStorageService:
                 # Validate checksum
                 if computed_checksum != expected_checksum:
                     raise StorageChecksumMismatchError(
-                        f"Checksum mismatch: expected {expected_checksum}, got {computed_checksum}"
+                        storage_ref,
+                        expected_checksum,
+                        computed_checksum,
                     )
 
                 # Atomic rename
                 os.rename(temp_path, target_path)
 
                 # Write metadata
-                upload_metadata = {
+                upload_metadata: dict[str, Any] = {
                     "storage_ref": storage_ref,
                     "checksum": computed_checksum,
                     "size": file_size,
                     "content_type": content_type,
-                    "uploaded_at": datetime.utcnow().isoformat(),
+                    "uploaded_at": datetime.now(UTC).isoformat(),
                     "custom": metadata or {},
                 }
                 await self._write_metadata(target_path, upload_metadata)
 
-                return {
+                return cast(dict[str, Any], {
                     "storage_ref": storage_ref,
                     "checksum": computed_checksum,
                     "size": file_size,
                     "uploaded_at": upload_metadata["uploaded_at"],
-                }
+                })
 
             finally:
                 # Clean up temp file if it still exists
@@ -266,7 +275,7 @@ class LocalStorageService:
         ):
             raise
         except Exception as e:
-            raise StorageUploadError(f"Upload failed: {str(e)}") from e
+            raise StorageUploadError(storage_ref, f"Upload failed: {str(e)}") from e
 
     async def download(self, storage_ref: str) -> AsyncIterator[bytes]:
         """
@@ -298,7 +307,7 @@ class LocalStorageService:
         except StorageNotFoundError:
             raise
         except Exception as e:
-            raise StorageDownloadError(f"Download failed: {str(e)}") from e
+            raise StorageDownloadError(storage_ref, f"Download failed: {str(e)}") from e
 
     async def delete(self, storage_ref: str) -> bool:
         """
@@ -342,7 +351,7 @@ class LocalStorageService:
             return True
 
         except Exception as e:
-            raise StorageDeleteError(f"Delete failed: {str(e)}") from e
+            raise StorageDeleteError(storage_ref, f"Delete failed: {str(e)}") from e
 
     async def exists(self, storage_ref: str) -> bool:
         """
@@ -357,8 +366,8 @@ class LocalStorageService:
         try:
             file_path = self._get_full_path(storage_ref)
             return file_path.exists()
-        except Exception:
-            return False
+        except Exception as e:
+            raise StorageNotFoundError(f"File not found: {storage_ref}") from e
 
     async def get_metadata(self, storage_ref: str) -> dict[str, Any]:
         """
@@ -390,19 +399,72 @@ class LocalStorageService:
         }
 
     async def generate_download_url(
-        self, storage_ref: str, expiration: timedelta = timedelta(hours=1)
+        self,
+        storage_ref: str,
+        expiration: timedelta = timedelta(hours=1)
     ) -> str:
         """
-        Generate download URL (not supported for local storage).
+        Generate temporary download URL with expiration.
 
         Args:
             storage_ref: Storage path
-            expiration: Ignored for local storage
+            expiration: URL expiration time (default: 1 hour)
+
+        Returns:
+            str: Temporary download URL
 
         Raises:
-            StorageNotSupportedError: Always (local storage doesn't support URLs)
+            StorageNotFoundError: If file doesn't exist
         """
-        raise StorageNotSupportedError(
-            "Local storage doesn't support pre-signed URLs. "
-            "Use direct download endpoint instead."
-        )
+        # Verify file exists
+        if not await self.exists(storage_ref):
+            raise StorageNotFoundError(f"File not found: {storage_ref}")
+
+        # Generate secure token
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(UTC) + expiration
+
+        # Store token mapping
+        self._download_tokens[token] = (storage_ref, expires_at)
+
+        # Clean expired tokens
+        self._cleanup_expired_tokens()
+
+        # Return URL
+        path = f"/api/storage/download/{token}"
+        if self.base_url:
+            return f"{self.base_url}{path}"
+        return path
+
+    def _cleanup_expired_tokens(self) -> None:
+        """Remove expired download tokens."""
+        now = datetime.now(UTC)
+        expired = [
+            token
+            for token, (_, expires_at) in self._download_tokens.items()
+            if expires_at <= now
+        ]
+        for token in expired:
+            del self._download_tokens[token]
+
+    def validate_download_token(self, token: str) -> str | None:
+        """
+        Validate download token and return storage_ref if valid.
+
+        Args:
+            token: Download token
+
+        Returns:
+            str | None: Storage reference if valid, None if invalid/expired
+        """
+        if token not in self._download_tokens:
+            return None
+
+        storage_ref, expires_at = self._download_tokens[token]
+
+        # Check if expired
+        if datetime.now(UTC) > expires_at:
+            del self._download_tokens[token]
+            return None
+
+        return storage_ref

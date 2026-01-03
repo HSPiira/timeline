@@ -2,6 +2,7 @@
 
 import base64
 import json
+from typing import Any, cast
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
@@ -16,7 +17,7 @@ DECRYPTION_ERROR_MSG = "Failed to decrypt credentials - invalid or corrupted dat
 class CredentialEncryptor:
     """Encrypt/decrypt email credentials using Fernet symmetric encryption"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # In production, use settings.secret_key or dedicated encryption key
         # For now, derive from secret_key
         self._fernet = Fernet(self._get_encryption_key())
@@ -47,7 +48,7 @@ class CredentialEncryptor:
         # Fernet requires base64url-encoded 32-byte key
         return base64.urlsafe_b64encode(derived_key)
 
-    def encrypt(self, credentials: dict) -> str:
+    def encrypt(self, credentials: dict[str, Any]) -> str:
         """
         Encrypt credentials dictionary to string.
 
@@ -61,7 +62,7 @@ class CredentialEncryptor:
         encrypted_bytes = self._fernet.encrypt(json_str.encode())
         return encrypted_bytes.decode()
 
-    def decrypt(self, encrypted_str: str) -> dict:
+    def decrypt(self, encrypted_str: str) -> dict[str, Any]:
         """
         Decrypt credentials string to dictionary.
 
@@ -77,7 +78,7 @@ class CredentialEncryptor:
             result = json.loads(json_str)
             if not isinstance(result, dict):
                 raise ValueError("Decrypted credentials must be a dictionary")
-            return result
+            return cast(dict[str, Any], result)
         except InvalidToken as e:
             raise ValueError(DECRYPTION_ERROR_MSG) from e
         except json.JSONDecodeError as e:

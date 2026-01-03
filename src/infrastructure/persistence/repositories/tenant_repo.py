@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +47,7 @@ class TenantRepository(BaseRepository[Tenant]):
 
         # Cache for future requests
         if tenant and self.cache and self.cache.is_available():
-            tenant_dict = {
+            tenant_dict: dict[str, Any] = {
                 "id": tenant.id,
                 "code": tenant.code,
                 "name": tenant.name,
@@ -81,7 +82,7 @@ class TenantRepository(BaseRepository[Tenant]):
 
         # Cache for future requests
         if tenant and self.cache and self.cache.is_available():
-            tenant_dict = {
+            tenant_dict: dict[str, Any] = {
                 "id": tenant.id,
                 "code": tenant.code,
                 "name": tenant.name,

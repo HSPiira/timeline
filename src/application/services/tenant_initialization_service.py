@@ -125,14 +125,20 @@ DEFAULT_ROLES: dict[str, RoleData] = {
     },
 }
 
+class InitializationResult(TypedDict):  
+    """Result of tenant initialization"""  
+    permissions_created: int  
+    roles_created: int  
+    admin_role_assigned: bool  
 
+    
 class TenantInitializationService:
     """Service for initializing new tenants with default RBAC setup"""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def initialize_tenant(self, tenant_id: str, admin_user_id: str) -> dict:
+    async def initialize_tenant(self, tenant_id: str, admin_user_id: str) -> InitializationResult:
         """
         Initialize a new tenant with:
         - Default permissions
@@ -158,8 +164,8 @@ class TenantInitializationService:
 
     async def _create_permissions(self, tenant_id: str) -> dict[str, str]:
         """Create default permissions for a tenant. Returns mapping of code -> permission_id"""
-        permission_map = {}
-        permissions = []
+        permission_map: dict[str, str] = {}
+        permissions: list[Permission] = []
 
         for code, resource, action, description in SYSTEM_PERMISSIONS:
             perm_id = generate_cuid()
@@ -182,12 +188,17 @@ class TenantInitializationService:
         self, tenant_id: str, permission_map: dict[str, str]
     ) -> dict[str, str]:
         """Create default roles with permissions. Returns mapping of role_code -> role_id"""
-        role_map = {}
+        role_map: dict[str, str] = {}
+        roles: list[Role] = []
+        role_permissions: list[RolePermission] = []
 
         for role_code, role_data in DEFAULT_ROLES.items():
+            # Pre-generate role ID
+            role_id = generate_cuid()
+
             # Create role
             role = Role(
-                id=generate_cuid(),
+                id=role_id,
                 tenant_id=tenant_id,
                 code=role_code,
                 name=role_data["name"],
@@ -195,9 +206,8 @@ class TenantInitializationService:
                 is_system=role_data["is_system"],
                 is_active=True,
             )
-            self.db.add(role)
-            await self.db.flush()
-            role_map[role_code] = role.id
+            roles.append(role)
+            role_map[role_code] = role_id
 
             # Assign permissions to role
             for perm_pattern in role_data["permissions"]:
@@ -219,12 +229,15 @@ class TenantInitializationService:
                     role_permission = RolePermission(
                         id=generate_cuid(),
                         tenant_id=tenant_id,
-                        role_id=role.id,
+                        role_id=role_id,
                         permission_id=perm_id,
                     )
-                    self.db.add(role_permission)
+                    role_permissions.append(role_permission)
 
-            await self.db.flush()
+        # Batch insert all roles and role-permissions
+        self.db.add_all(roles)
+        self.db.add_all(role_permissions)
+        await self.db.flush()
 
         return role_map
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import UTC, datetime
 from src.infrastructure.persistence.models.workflow import (Workflow,
                                                             WorkflowExecution)
 
@@ -79,9 +80,8 @@ class WorkflowRepository:
         if not workflow:
             return False
 
-        from datetime import datetime
 
-        workflow.deleted_at = datetime.utcnow()
+        workflow.deleted_at = datetime.now(UTC)
         await self.db.flush()
         return True
 

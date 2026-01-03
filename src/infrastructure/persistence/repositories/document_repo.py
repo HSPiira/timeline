@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,7 +75,6 @@ class DocumentRepository(BaseRepository[Document]):
 
     async def soft_delete(self, document_id: str) -> Document | None:
         """Soft delete a document"""
-        from datetime import datetime
 
         document = await self.get_by_id(document_id)
         if document:

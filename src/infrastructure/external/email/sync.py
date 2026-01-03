@@ -1,6 +1,7 @@
 """Universal email sync service (provider-agnostic)"""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, Protocol, cast
 
 from google.auth.exceptions import RefreshError
 from sqlalchemy import and_, select
@@ -20,6 +21,14 @@ from src.shared.telemetry.logging import get_logger
 logger = get_logger(__name__)
 
 
+class TokenRefreshProvider(Protocol):
+    """Protocol for providers that support token refresh callbacks"""
+
+    def set_token_refresh_callback(self, callback: Any) -> None:
+        """Set callback for token refresh events"""
+        ...
+
+
 class AuthenticationError(Exception):
     """Raised when email provider authentication fails"""
 
@@ -32,7 +41,7 @@ class UniversalEmailSync:
         self.event_service = event_service
         self.encryptor = CredentialEncryptor()
 
-    async def sync_account(self, email_account: EmailAccount, *, incremental: bool = True) -> dict:
+    async def sync_account(self, email_account: EmailAccount, *, incremental: bool = True) -> dict[str, int | str]:
         """
         Sync email account to Timeline events (works with ANY provider).
 
@@ -64,7 +73,7 @@ class UniversalEmailSync:
             provider, "set_token_refresh_callback"
         ):
 
-            def save_refreshed_tokens(updated_credentials: dict):
+            def save_refreshed_tokens(updated_credentials: dict[str, str]) -> None:
                 """
                 Save refreshed tokens back to database immediately.
 
@@ -94,7 +103,8 @@ class UniversalEmailSync:
                         exc_info=True,
                     )
 
-            provider.set_token_refresh_callback(save_refreshed_tokens)
+            # Type narrowing: hasattr confirmed the method exists
+            cast(TokenRefreshProvider, provider).set_token_refresh_callback(save_refreshed_tokens)
 
         try:
             await provider.connect(config)
@@ -102,7 +112,7 @@ class UniversalEmailSync:
             since = email_account.last_sync_at if incremental else None
             messages = await provider.fetch_messages(since=since, limit=100)
 
-            logger.info(f"Fetched {len(messages)} messages from {email_account.provider_type}")
+            logger.info("Fetched %s messages from %s", len(messages), email_account.provider_type)
 
             (
                 events_created,
@@ -113,25 +123,25 @@ class UniversalEmailSync:
                 email_account.last_sync_at = last_processed_timestamp.replace(tzinfo=None)
             elif events_created == 0 and len(messages) > 0:
                 logger.warning(
-                    f"Fetched {len(messages)} messages but created 0 events. "
-                    f"Not updating last_sync_at to allow retry."
+                    "Fetched %s messages but created 0 events. "
+                    "Not updating last_sync_at to allow retry.", len(messages)
                 )
 
             # Always commit to persist any token refreshes that occurred
             await self.db.commit()
             logger.info(
-                f"Sync transaction committed (events: {events_created}, "
-                f"last_sync_at updated: {events_created > 0})"
+                "Sync transaction committed (events: %s, "
+                "last_sync_at updated: %s)", events_created, events_created > 0
             )
 
-            stats = {
+            stats: dict[str, int | str] = {
                 "messages_fetched": len(messages),
                 "events_created": events_created,
                 "provider": email_account.provider_type,
                 "sync_type": "incremental" if incremental else "full",
             }
 
-            logger.info(f"Sync completed: {stats}")
+            logger.info("Sync completed: %s", stats)
             return stats
 
         except RefreshError as e:
@@ -142,12 +152,12 @@ class UniversalEmailSync:
             await self.db.commit()  # Persist error tracking even on failure
 
             logger.error(
-                f"OAuth token refresh failed for {email_account.email_address}: {e}",
+                "OAuth token refresh failed for %s: %s", email_account.email_address, e,
                 exc_info=True,
             )
             raise AuthenticationError(
-                f"Gmail OAuth token has expired or been revoked for {email_account.email_address}. "
-                f"Please re-authenticate the email account."
+                "Gmail OAuth token has expired or been revoked for %s. "
+                "Please re-authenticate the email account.", email_account.email_address
             ) from e
         finally:
             await provider.disconnect()
@@ -182,7 +192,7 @@ class UniversalEmailSync:
             try:
                 # IN-MEMORY CHECK: O(1) lookup instead of database query
                 if msg.message_id in existing_message_ids:
-                    logger.debug(f"Skipping message {msg.message_id} - event already exists")
+                    logger.debug("Skipping message %s - event already exists", msg.message_id)
                     last_successfully_processed_timestamp = msg.timestamp
                     continue
 
@@ -194,8 +204,8 @@ class UniversalEmailSync:
                     event_time = last_timestamp + timedelta(microseconds=1)
                     timestamp_adjusted = True
                     logger.warning(
-                        f"Adjusted timestamp for historical email {msg.message_id}: "
-                        f"{original_time} -> {event_time} (original preserved in payload)"
+                        "Adjusted timestamp for historical email %s: "
+                        "%s -> %s (original preserved in payload)", msg.message_id, original_time, event_time
                     )
 
                 last_timestamp = event_time
@@ -231,7 +241,7 @@ class UniversalEmailSync:
 
             except Exception as e:
                 logger.error(
-                    f"Failed to create event for message {msg.message_id}: {e}",
+                    "Failed to create event for message %s: %s", msg.message_id, e,
                     exc_info=True,
                 )
                 continue
@@ -311,7 +321,7 @@ class UniversalEmailSync:
 
         return result.scalar_one_or_none()
 
-    async def setup_webhook(self, email_account: EmailAccount, callback_url: str) -> dict:
+    async def setup_webhook(self, email_account: EmailAccount, callback_url: str) -> dict[str, str]:
         """Setup webhook for real-time sync (if provider supports it)"""
         credentials = self.encryptor.decrypt(email_account.credentials_encrypted)
         config = EmailProviderConfig(
@@ -325,14 +335,14 @@ class UniversalEmailSync:
 
         if not provider.supports_webhooks:
             raise ValueError(
-                f"Provider {email_account.provider_type} does not support webhooks. "
-                "Use polling sync instead."
+                "Provider %s does not support webhooks. "
+                "Use polling sync instead.", config.provider_type
             )
 
         try:
             await provider.connect(config)
             webhook_config = await provider.setup_webhook(callback_url)
-            logger.info(f"Webhook setup for {email_account.email_address}: {webhook_config}")
+            logger.info("Webhook setup for %s: %s", email_account.email_address, webhook_config)
             return webhook_config
         finally:
             await provider.disconnect()
