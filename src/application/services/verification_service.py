@@ -34,6 +34,7 @@ class VerificationResult:
         error_message: str | None = None,
         expected_hash: str | None = None,
         actual_hash: str | None = None,
+        previous_hash: str | None = None,
     ):
         self.event_id = event_id
         self.event_type = event_type
@@ -44,6 +45,7 @@ class VerificationResult:
         self.error_message = error_message
         self.expected_hash = expected_hash
         self.actual_hash = actual_hash
+        self.previous_hash = previous_hash
 
 
 class ChainVerificationResult:
@@ -246,6 +248,7 @@ class VerificationService:
                 error_message="Event hash does not match recomputed hash",
                 expected_hash=computed_hash,
                 actual_hash=event.hash,
+                previous_hash=event.previous_hash,
             )
 
         # Check 2: Chain linkage
@@ -265,6 +268,7 @@ class VerificationService:
                     ),
                     expected_hash=None,
                     actual_hash=event.previous_hash,
+                    previous_hash=event.previous_hash,
                 )
         else:
             # Non-genesis event - previous_hash must match previous event's hash
@@ -279,6 +283,7 @@ class VerificationService:
                     error_message=f"Previous event not found for sequence {sequence}",
                     expected_hash="<previous_event>",
                     actual_hash=None,
+                    previous_hash=event.previous_hash,
                 )
 
             if event.previous_hash != previous_event.hash:
@@ -295,6 +300,7 @@ class VerificationService:
                     ),
                     expected_hash=previous_event.hash,
                     actual_hash=event.previous_hash,
+                    previous_hash=event.previous_hash,
                 )
 
         # All checks passed
@@ -308,4 +314,5 @@ class VerificationService:
             error_message=None,
             expected_hash=event.hash,
             actual_hash=event.hash,
+            previous_hash=event.previous_hash,
         )

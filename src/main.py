@@ -14,22 +14,38 @@ from src.domain.exceptions import TimelineException
 from src.infrastructure.cache.redis_cache import CacheService
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.persistence.database import engine, get_db
-from src.presentation.api.dependencies import (get_cache_service,
-                                               set_cache_service)
-from src.presentation.api.v1.routes import (auth, documents, email_accounts,
-                                            event_schemas, events,
-                                            oauth_providers, permissions,
-                                            roles, subjects, tenants,
-                                            user_roles, users, workflows)
+from src.presentation.api.dependencies import (
+    get_cache_service,
+    set_cache_service,
+)
+from src.presentation.api.v1.routes import (
+    auth,
+    documents,
+    email_accounts,
+    event_schemas,
+    events,
+    oauth_providers,
+    permissions,
+    roles,
+    subjects,
+    tenants,
+    user_roles,
+    users,
+    workflows,
+)
 from src.presentation.middleware.correlation import CorrelationIDMiddleware
 from src.presentation.middleware.rate_limit import limiter
 from src.presentation.middleware.security import (RequestIDMiddleware,
-                                                  RequestSizeLimitMiddleware,
-                                                  SecurityHeadersMiddleware)
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from src.presentation.middleware.timeout import TimeoutMiddleware
 from src.shared.telemetry.logging import setup_logging
-from src.shared.telemetry.telemetry import (TelemetryConfig, get_telemetry,
-                                            set_telemetry)
+from src.shared.telemetry.telemetry import (
+    TelemetryConfig,
+    get_telemetry,
+    set_telemetry,
+)
 
 logger = logging.getLogger(__name__)
 

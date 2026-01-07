@@ -114,17 +114,13 @@ class Event(CuidMixin, TenantMixin, Base):
 
             if not prev_event:
                 raise ValueError(
-                    "Invalid previous_hash: %s not found for subject %s",
-                    previous_hash,
-                    subject_id,
+                    f"Invalid previous_hash: {previous_hash} not found for subject {subject_id}"
                 )
 
             # Enforce temporal ordering
             if event_time <= prev_event.event_time:
                 raise ValueError(
-                    "Event time %s must be after previous event time %s",
-                    event_time,
-                    prev_event.event_time,
+                    f"Event time {event_time} must be after previous event time {prev_event.event_time}"
                 )
 
         # Compute hash with validated inputs

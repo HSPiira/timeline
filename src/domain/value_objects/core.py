@@ -42,29 +42,21 @@ class TenantCode:
 
 
 @dataclass(frozen=True)
-class TenantId:
-    """Value object for Tenant ID (SRP - single validation responsibility)"""
+class SubjectType:
+    """Value object for Subject Type (SRP)"""
 
     value: str
 
     def __post_init__(self) -> None:
         if not self.value:
-            raise ValueError("Tenant ID must be a non-empty string")
-        if len(self.value) > 255:
-            raise ValueError("Tenant ID must not exceed 255 characters")
-
-
-@dataclass(frozen=True)
-class SubjectId:
-    """Value object for Subject ID (SRP)"""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Subject ID must be a non-empty string")
-        if len(self.value) > 255:
-            raise ValueError("Subject ID must not exceed 255 characters")
+            raise ValueError("Subject type must be a non-empty string")
+        if len(self.value) > 150:
+            raise ValueError("Subject type must not exceed 150 characters")
+        if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", self.value):
+            raise ValueError(
+                "Subject type must be lowercase alphanumeric with optional hyphens "
+                "(e.g., 'client', 'policy', 'supplier')"
+            )
 
 
 @dataclass(frozen=True)
