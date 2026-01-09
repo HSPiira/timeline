@@ -27,7 +27,7 @@ class OAuthProviderConfigRepository(AuditableRepository[OAuthProviderConfig]):
         audit_service: "SystemAuditService | None" = None,
         *,
         enable_audit: bool = True,
-    ):
+    ) -> None:
         super().__init__(db, OAuthProviderConfig, audit_service, enable_audit=enable_audit)
 
     # Auditable implementation

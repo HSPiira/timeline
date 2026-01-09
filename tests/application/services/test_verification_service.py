@@ -36,6 +36,7 @@ def create_test_event(
     payload: dict,
     previous_hash: str | None = None,
     hash_service: HashService | None = None,
+    schema_version: int = 1,
 ) -> Event:
     """Helper to create test event with valid hash"""
     event_time = datetime.utcnow()
@@ -44,9 +45,9 @@ def create_test_event(
         hash_service = HashService()
 
     computed_hash = hash_service.compute_hash(
-        tenant_id=tenant_id,
         subject_id=subject_id,
         event_type=event_type,
+        schema_version=schema_version,
         event_time=event_time,
         payload=payload,
         previous_hash=previous_hash,
@@ -57,6 +58,7 @@ def create_test_event(
         tenant_id=tenant_id,
         subject_id=subject_id,
         event_type=event_type,
+        schema_version=schema_version,
         event_time=event_time,
         payload=payload,
         hash=computed_hash,

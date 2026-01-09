@@ -1,13 +1,21 @@
-import hashlib
-import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import (JSON, CheckConstraint, DateTime, ForeignKey, Index,
-                        Integer, String, event)
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy import (
+    Connection,
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    event,
+)
+from sqlalchemy.orm import Mapped, Mapper, Session, mapped_column
 from sqlalchemy.sql import func
 
+from src.application.services.hash_service import HashService
 from src.infrastructure.persistence.database import Base
 from src.infrastructure.persistence.models.mixins import CuidMixin, TenantMixin
 
@@ -48,38 +56,33 @@ class Event(CuidMixin, TenantMixin, Base):
         CheckConstraint("created_at IS NOT NULL", name="ck_event_created_at_immutable"),
     )
 
-    @staticmethod
+    # Hash service instance for computing event hashes
+    _hash_service = HashService()
+
+    @classmethod
     def compute_hash(
+        cls,
         subject_id: str,
         event_type: str,
         schema_version: int,
         event_time: datetime,
-        payload: dict,
+        payload: dict[str, Any],
         previous_hash: str | None,
     ) -> str:
         """
         Compute cryptographic hash for event integrity.
 
-        Hash includes:
-        - subject_id: Who the event is about
-        - event_type: What happened
-        - schema_version: Schema used
-        - event_time: When it happened (ISO format)
-        - payload: Event data (canonicalized JSON)
-        - previous_hash: Link to previous event (creates chain)
+        Delegates to HashService which is the single source of truth
+        for hash computation across the application.
         """
-        hash_content = {
-            "subject_id": subject_id,
-            "event_type": event_type,
-            "schema_version": schema_version,
-            "event_time": event_time.isoformat(),
-            "payload": payload,
-            "previous_hash": previous_hash,
-        }
-
-        # Canonicalize JSON for consistent hashing
-        canonical_json = json.dumps(hash_content, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(canonical_json.encode()).hexdigest()
+        return cls._hash_service.compute_hash(
+            subject_id=subject_id,
+            event_type=event_type,
+            schema_version=schema_version,
+            event_time=event_time,
+            payload=payload,
+            previous_hash=previous_hash,
+        )
 
     @classmethod
     def create_event(
@@ -90,7 +93,7 @@ class Event(CuidMixin, TenantMixin, Base):
         event_type: str,
         schema_version: int,
         event_time: datetime,
-        payload: dict,
+        payload: dict[str, Any],
         previous_hash: str | None = None,
     ) -> "Event":
         """
@@ -148,7 +151,11 @@ class Event(CuidMixin, TenantMixin, Base):
 
 # Prevent updates to events at ORM level (events are immutable)
 @event.listens_for(Event, "before_update")
-def prevent_event_updates(mapper, connection, target):
+def prevent_event_updates(
+    _mapper: Mapper[Any], 
+    _connection: Connection, 
+    _target: "Event"
+) -> None:
     """
     Events are append-only and cannot be modified after creation.
     This is fundamental to event sourcing and audit trail integrity.

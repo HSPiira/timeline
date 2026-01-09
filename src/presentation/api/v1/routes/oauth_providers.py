@@ -5,7 +5,10 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime
 
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.external.email.envelope_encryption import (
@@ -391,35 +394,65 @@ async def authorize_provider(
     )
 
 
-@router.get("/{provider}/callback", response_model=OAuthCallbackResponse)
+@router.get("/{provider}/callback")
 async def oauth_callback(
     provider: str,
-    code: str = Query(..., description="Authorization code from provider"),
+    code: str = Query(None, description="Authorization code from provider"),
     state: str = Query(..., description="OAuth state parameter"),
     error: str | None = Query(None, description="Error from provider"),
+    error_description: str | None = Query(None, description="Error description from provider"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Handle OAuth callback from provider.
 
     Exchanges authorization code for tokens and creates EmailAccount.
+    Redirects to frontend return_url with result as query parameters.
     """
+    state_repo = OAuthStateRepository(db)
+    state_manager = OAuthStateManager()
+
+    # Try to get return_url from state for error redirects
+    return_url = None
+    try:
+        state_id = state_manager.verify_and_extract(state)
+        state_record = await state_repo.get_by_id(state_id)
+        if state_record:
+            return_url = state_record.return_url
+    except Exception:
+        pass  # Will use default error handling if state is invalid
+
+    # Handle provider errors
     if error:
-        logger.warning(f"OAuth error from {provider}: {error}")
+        logger.warning(f"OAuth error from {provider}: {error} - {error_description}")
+        if return_url:
+            params = {"error": error, "error_description": error_description or error}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"OAuth authorization failed: {error}",
         )
 
-    state_repo = OAuthStateRepository(db)
-    config_repo = OAuthProviderConfigRepository(db)
-    state_manager = OAuthStateManager()
+    # Code is required if no error
+    if not code:
+        if return_url:
+            params = {"error": "missing_code", "error_description": "No authorization code received"}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No authorization code received",
+        )
 
-    # Verify and extract state
+    config_repo = OAuthProviderConfigRepository(db)
+
+    # Verify and extract state (already partially done above for return_url)
     try:
         state_id = state_manager.verify_and_extract(state)
     except ValueError as e:
         logger.error(f"Invalid OAuth state: {e}")
+        if return_url:
+            params = {"error": "invalid_state", "error_description": "Invalid state parameter - possible CSRF attack"}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid state parameter - possible CSRF attack",
@@ -428,14 +461,23 @@ async def oauth_callback(
     # Consume state (replay protection)
     state_record = await state_repo.consume_state(state_id)
     if not state_record:
+        if return_url:
+            params = {"error": "expired_state", "error_description": "Authorization timed out or already used"}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired state - authorization timed out or already used",
         )
 
+    # Update return_url from consumed state record
+    return_url = state_record.return_url
+
     # Get provider config
     config = await config_repo.get_by_id(state_record.provider_config_id)
     if not config:
+        if return_url:
+            params = {"error": "config_not_found", "error_description": "Provider configuration not found"}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Provider configuration not found",
@@ -448,6 +490,9 @@ async def oauth_callback(
         client_secret = encryptor.decrypt(config.client_secret_encrypted)
     except Exception as e:
         logger.error(f"Failed to decrypt OAuth credentials: {e}")
+        if return_url:
+            params = {"error": "server_error", "error_description": "Failed to process OAuth credentials"}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to decrypt OAuth credentials",
@@ -470,6 +515,9 @@ async def oauth_callback(
         await config_repo.update_health_status(
             config.id, "unhealthy", f"Token exchange failed: {e}"
         )
+        if return_url:
+            params = {"error": "token_exchange_failed", "error_description": str(e)}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to exchange authorization code: {str(e)}",
@@ -480,6 +528,9 @@ async def oauth_callback(
         user_info = await driver.get_user_info(tokens.access_token)
     except ValueError as e:
         logger.error(f"Failed to get user info: {e}")
+        if return_url:
+            params = {"error": "user_info_failed", "error_description": str(e)}
+            return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to retrieve user information: {str(e)}",
@@ -515,7 +566,7 @@ async def oauth_callback(
         await db.flush()
 
     # Encrypt credentials for storage
-    from integrations.email.encryption import CredentialEncryptor
+    from infrastructure.external.email.encryption import CredentialEncryptor
 
     credential_encryptor = CredentialEncryptor()
     credentials = {
@@ -573,6 +624,17 @@ async def oauth_callback(
     await db.commit()
     await db.refresh(email_account)
 
+    # Redirect to frontend with success params
+    if return_url:
+        params = {
+            "success": "true",
+            "email_account_id": email_account.id,
+            "email_address": user_info.email,
+            "provider": provider,
+        }
+        return RedirectResponse(url=f"{return_url}?{urlencode(params)}")
+
+    # Fallback to JSON response if no return_url (for API testing)
     return OAuthCallbackResponse(
         success=True,
         email_account_id=email_account.id,

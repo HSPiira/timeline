@@ -39,6 +39,9 @@ class HashService:
     """
     Hash service following OCP - closed for modification, open for extension.
     New hash algorithms can be added without modifying this class.
+
+    This is the single source of truth for event hash computation.
+    Used by both event creation and verification to ensure consistency.
     """
 
     def __init__(self, algorithm: HashAlgorithm | None = None):
@@ -51,22 +54,33 @@ class HashService:
 
     def compute_hash(
         self,
-        tenant_id: str,
         subject_id: str,
         event_type: str,
+        schema_version: int,
         event_time: datetime,
         payload: dict[str, Any],
         previous_hash: str | None,
     ) -> str:
-        """Compute hash for event data using configured algorithm"""
-        base = "|".join(
-            [
-                tenant_id,
-                subject_id,
-                event_type,
-                event_time.isoformat(),
-                self.canonical_json(payload),
-                previous_hash or "GENESIS",
-            ]
-        )
-        return self.algorithm.hash(base)
+        """
+        Compute cryptographic hash for event integrity.
+
+        Hash includes:
+        - subject_id: Who the event is about
+        - event_type: What happened
+        - schema_version: Schema used
+        - event_time: When it happened (ISO format)
+        - payload: Event data (canonicalized JSON)
+        - previous_hash: Link to previous event (creates chain)
+
+        Returns:
+            SHA-256 hex digest of the canonical JSON representation
+        """
+        hash_content = {
+            "subject_id": subject_id,
+            "event_type": event_type,
+            "schema_version": schema_version,
+            "event_time": event_time.isoformat(),
+            "payload": payload,
+            "previous_hash": previous_hash,
+        }
+        return self.algorithm.hash(self.canonical_json(hash_content))

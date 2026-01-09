@@ -226,11 +226,11 @@ class VerificationService:
         Returns:
             VerificationResult with validation details
         """
-        # Recompute hash
+        # Recompute hash using the same method as event creation
         computed_hash = self.hash_service.compute_hash(
-            tenant_id=event.tenant_id,
             subject_id=event.subject_id,
             event_type=event.event_type,
+            schema_version=event.schema_version,
             event_time=event.event_time,
             payload=event.payload,
             previous_hash=event.previous_hash,

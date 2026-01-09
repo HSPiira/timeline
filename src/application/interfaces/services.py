@@ -20,9 +20,9 @@ class IHashService(Protocol):
 
     def compute_hash(
         self,
-        tenant_id: str,
         subject_id: str,
         event_type: str,
+        schema_version: int,
         event_time: datetime,
         payload: dict[str, Any],
         previous_hash: str | None,

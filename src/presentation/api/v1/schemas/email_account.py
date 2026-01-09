@@ -53,6 +53,15 @@ class EmailAccountResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # OAuth status fields
+    oauth_status: str | None = None  # active, consent_denied, refresh_failed, revoked, expired, unknown
+    oauth_error_count: int = 0
+    oauth_next_retry_at: datetime | None = None
+    last_auth_error: str | None = None
+    last_auth_error_at: datetime | None = None
+    token_last_refreshed_at: datetime | None = None
+    granted_scopes: list[str] | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

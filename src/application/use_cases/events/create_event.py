@@ -86,12 +86,12 @@ class EventService:
 
         # 5. Compute hash using previous event's hash
         event_hash = self.hash_service.compute_hash(
-            tenant_id,
-            event.subject_id,
-            event.event_type,
-            event.event_time,
-            event.payload,
-            prev_hash,
+            subject_id=event.subject_id,
+            event_type=event.event_type,
+            schema_version=event.schema_version,
+            event_time=event.event_time,
+            payload=event.payload,
+            previous_hash=prev_hash,
         )
 
         # 6. Create the event
