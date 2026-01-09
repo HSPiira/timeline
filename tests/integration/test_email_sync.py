@@ -1,14 +1,17 @@
 """Integration tests for email synchronization"""
+
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.infrastructure.external.email.protocols import EmailMessage
-from src.infrastructure.external.email.sync import AuthenticationError, UniversalEmailSync
+from src.infrastructure.external.email.sync import (AuthenticationError,
+                                                    UniversalEmailSync)
 from src.infrastructure.persistence.models.email_account import EmailAccount
 from src.infrastructure.persistence.models.subject import Subject
-from src.infrastructure.persistence.repositories.event_repo import EventRepository
+from src.infrastructure.persistence.repositories.event_repo import \
+    EventRepository
 
 
 @pytest.fixture
@@ -74,9 +77,7 @@ def mock_email_messages():
 
 
 @pytest.mark.asyncio
-async def test_gmail_sync_creates_events(
-    test_db, test_email_account, mock_email_messages
-):
+async def test_gmail_sync_creates_events(test_db, test_email_account, mock_email_messages):
     """Test that Gmail sync creates events correctly"""
     from repositories.event_schema_repo import EventSchemaRepository
     from repositories.subject_repo import SubjectRepository
@@ -95,9 +96,7 @@ async def test_gmail_sync_creates_events(
     sync_service = UniversalEmailSync(test_db, event_service)
 
     # Mock the provider
-    with patch(
-        "integrations.email.factory.EmailProviderFactory.create_provider"
-    ) as mock_factory:
+    with patch("integrations.email.factory.EmailProviderFactory.create_provider") as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.fetch_messages = AsyncMock(return_value=mock_email_messages)
@@ -105,17 +104,13 @@ async def test_gmail_sync_creates_events(
         mock_factory.return_value = mock_provider
 
         # Mock the encryptor
-        with patch(
-            "integrations.email.sync.CredentialEncryptor"
-        ) as mock_encryptor_class:
+        with patch("integrations.email.sync.CredentialEncryptor") as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor
 
             # Run sync
-            stats = await sync_service.sync_account(
-                test_email_account, incremental=True
-            )
+            stats = await sync_service.sync_account(test_email_account, incremental=True)
 
             # Verify stats
             assert stats["messages_fetched"] == 2
@@ -146,9 +141,7 @@ async def test_gmail_sync_creates_events(
 
 
 @pytest.mark.asyncio
-async def test_email_sync_deduplication(
-    test_db, test_email_account, mock_email_messages
-):
+async def test_email_sync_deduplication(test_db, test_email_account, mock_email_messages):
     """Test that duplicate emails are not synced twice"""
     from repositories.event_schema_repo import EventSchemaRepository
     from repositories.subject_repo import SubjectRepository
@@ -164,18 +157,14 @@ async def test_email_sync_deduplication(
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch(
-        "integrations.email.factory.EmailProviderFactory.create_provider"
-    ) as mock_factory:
+    with patch("integrations.email.factory.EmailProviderFactory.create_provider") as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.fetch_messages = AsyncMock(return_value=mock_email_messages)
         mock_provider.disconnect = AsyncMock()
         mock_factory.return_value = mock_provider
 
-        with patch(
-            "integrations.email.sync.CredentialEncryptor"
-        ) as mock_encryptor_class:
+        with patch("integrations.email.sync.CredentialEncryptor") as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor
@@ -232,18 +221,14 @@ async def test_email_sync_batch_deduplication_performance(test_db, test_email_ac
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch(
-        "integrations.email.factory.EmailProviderFactory.create_provider"
-    ) as mock_factory:
+    with patch("integrations.email.factory.EmailProviderFactory.create_provider") as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.fetch_messages = AsyncMock(return_value=messages)
         mock_provider.disconnect = AsyncMock()
         mock_factory.return_value = mock_provider
 
-        with patch(
-            "integrations.email.sync.CredentialEncryptor"
-        ) as mock_encryptor_class:
+        with patch("integrations.email.sync.CredentialEncryptor") as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor
@@ -258,9 +243,7 @@ async def test_email_sync_batch_deduplication_performance(test_db, test_email_ac
                 stats = await sync_service.sync_account(test_email_account)
 
                 # Verify batch check was used
-                assert (
-                    mock_batch_check.called
-                ), "Batch deduplication method should be called"
+                assert mock_batch_check.called, "Batch deduplication method should be called"
                 assert stats["events_created"] == 100
 
 
@@ -268,7 +251,6 @@ async def test_email_sync_batch_deduplication_performance(test_db, test_email_ac
 async def test_email_sync_handles_auth_error(test_db, test_email_account):
     """Test that authentication errors are properly handled"""
     from google.auth.exceptions import RefreshError
-
     from repositories.event_schema_repo import EventSchemaRepository
     from repositories.subject_repo import SubjectRepository
     from services.event_service import EventService
@@ -283,17 +265,13 @@ async def test_email_sync_handles_auth_error(test_db, test_email_account):
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch(
-        "integrations.email.factory.EmailProviderFactory.create_provider"
-    ) as mock_factory:
+    with patch("integrations.email.factory.EmailProviderFactory.create_provider") as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock(side_effect=RefreshError("Token expired"))
         mock_provider.disconnect = AsyncMock()
         mock_factory.return_value = mock_provider
 
-        with patch(
-            "integrations.email.sync.CredentialEncryptor"
-        ) as mock_encryptor_class:
+        with patch("integrations.email.sync.CredentialEncryptor") as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "expired_token"}
             mock_encryptor_class.return_value = mock_encryptor
@@ -309,9 +287,7 @@ async def test_email_sync_handles_auth_error(test_db, test_email_account):
 
 
 @pytest.mark.asyncio
-async def test_incremental_vs_full_sync(
-    test_db, test_email_account, mock_email_messages
-):
+async def test_incremental_vs_full_sync(test_db, test_email_account, mock_email_messages):
     """Test difference between incremental and full sync"""
     from repositories.event_schema_repo import EventSchemaRepository
     from repositories.subject_repo import SubjectRepository
@@ -327,9 +303,7 @@ async def test_incremental_vs_full_sync(
 
     sync_service = UniversalEmailSync(test_db, event_service)
 
-    with patch(
-        "integrations.email.factory.EmailProviderFactory.create_provider"
-    ) as mock_factory:
+    with patch("integrations.email.factory.EmailProviderFactory.create_provider") as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.connect = AsyncMock()
         mock_provider.disconnect = AsyncMock()
@@ -344,9 +318,7 @@ async def test_incremental_vs_full_sync(
         mock_provider.fetch_messages = track_fetch
         mock_factory.return_value = mock_provider
 
-        with patch(
-            "integrations.email.sync.CredentialEncryptor"
-        ) as mock_encryptor_class:
+        with patch("integrations.email.sync.CredentialEncryptor") as mock_encryptor_class:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"access_token": "test_token"}
             mock_encryptor_class.return_value = mock_encryptor

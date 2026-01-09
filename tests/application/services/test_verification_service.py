@@ -1,12 +1,13 @@
 """Unit tests for VerificationService"""
-from datetime import datetime
+
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
 
-from src.infrastructure.persistence.models.event import Event
 from src.application.services.hash_service import HashService
 from src.application.services.verification_service import VerificationService
+from src.infrastructure.persistence.models.event import Event
 
 
 @pytest.fixture
@@ -35,17 +36,18 @@ def create_test_event(
     payload: dict,
     previous_hash: str | None = None,
     hash_service: HashService | None = None,
+    schema_version: int = 1,
 ) -> Event:
     """Helper to create test event with valid hash"""
-    event_time = datetime.utcnow()
+    event_time = datetime.now(UTC)
 
     if hash_service is None:
         hash_service = HashService()
 
     computed_hash = hash_service.compute_hash(
-        tenant_id=tenant_id,
         subject_id=subject_id,
         event_type=event_type,
+        schema_version=schema_version,
         event_time=event_time,
         payload=payload,
         previous_hash=previous_hash,
@@ -56,6 +58,7 @@ def create_test_event(
         tenant_id=tenant_id,
         subject_id=subject_id,
         event_type=event_type,
+        schema_version=schema_version,
         event_time=event_time,
         payload=payload,
         hash=computed_hash,
@@ -213,9 +216,7 @@ class TestVerifySubjectChain:
         assert result.event_results[0].error_type == "HASH_MISMATCH"
 
     @pytest.mark.asyncio
-    async def test_broken_chain_detected(
-        self, verification_service, mock_event_repo, hash_service
-    ):
+    async def test_broken_chain_detected(self, verification_service, mock_event_repo, hash_service):
         """
         GIVEN events with broken previous_hash link
         WHEN verifying chain
@@ -304,9 +305,7 @@ class TestVerifyTenantChains:
         mock_event_repo.get_by_tenant.return_value = [event_a1, event_a2, event_b1]
 
         # WHEN
-        result = await verification_service.verify_tenant_chains(
-            tenant_id="tenant_123", limit=100
-        )
+        result = await verification_service.verify_tenant_chains(tenant_id="tenant_123", limit=100)
 
         # THEN
         assert result.is_chain_valid is True
@@ -349,9 +348,7 @@ class TestVerifyTenantChains:
         mock_event_repo.get_by_tenant.return_value = [event_a1, event_b1]
 
         # WHEN
-        result = await verification_service.verify_tenant_chains(
-            tenant_id="tenant_123", limit=100
-        )
+        result = await verification_service.verify_tenant_chains(tenant_id="tenant_123", limit=100)
 
         # THEN
         assert result.is_chain_valid is False

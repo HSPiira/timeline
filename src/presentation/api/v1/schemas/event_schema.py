@@ -20,9 +20,7 @@ class EventSchemaCreate(BaseModel):
         if not v or not isinstance(v, str):
             raise ValueError("Event type must be a non-empty string")
         if not v.replace("_", "").isalnum():
-            raise ValueError(
-                "Event type must contain only alphanumeric characters and underscores"
-            )
+            raise ValueError("Event type must contain only alphanumeric characters and underscores")
         return v.lower()
 
     @field_validator("schema_definition")
@@ -31,9 +29,7 @@ class EventSchemaCreate(BaseModel):
         if not v:
             raise ValueError("Schema definition cannot be empty")
         if "type" not in v:
-            raise ValueError(
-                "Schema must have a 'type' field (JSON Schema requirement)"
-            )
+            raise ValueError("Schema must have a 'type' field (JSON Schema requirement)")
         return v
 
 

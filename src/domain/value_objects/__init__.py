@@ -1,18 +1,11 @@
 """Domain value objects."""
 
 from src.domain.value_objects.core import (
-    EventChain,
-    EventType,
-    Hash,
-    SubjectId,
-    TenantCode,
-    TenantId,
-)
+    EventChain, EventType, Hash, SubjectType, TenantCode)
 
 __all__ = [
     "TenantCode",
-    "TenantId",
-    "SubjectId",
+    "SubjectType",
     "EventType",
     "Hash",
     "EventChain",

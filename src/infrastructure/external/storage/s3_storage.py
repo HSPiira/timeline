@@ -14,6 +14,7 @@ Compatible with:
 - DigitalOcean Spaces
 - Any S3-compatible storage
 """
+
 import hashlib
 from collections.abc import AsyncIterator
 from datetime import timedelta
@@ -55,7 +56,7 @@ class S3StorageService:
         endpoint_url: str | None = None,
         access_key: str | None = None,
         secret_key: str | None = None,
-    ):
+    ) -> None:
         """
         Initialize S3 storage service.
 
@@ -79,9 +80,9 @@ class S3StorageService:
             region_name=region,
         )
 
-    def _get_client_config(self):
+    def _get_client_config(self) -> dict[str, str]:
         """Get boto3 client configuration"""
-        config = {}
+        config: dict[str, str] = {}
         if self.endpoint_url:
             config["endpoint_url"] = self.endpoint_url
         return config
@@ -157,9 +158,7 @@ class S3StorageService:
                         }
                     else:
                         # Object exists with different checksum
-                        raise StorageAlreadyExistsError(
-                            f"Object exists at {storage_ref} with different checksum"
-                        )
+                        raise StorageAlreadyExistsError(storage_ref)
                 except ClientError as e:
                     if e.response["Error"]["Code"] != "404":
                         raise
@@ -176,9 +175,9 @@ class S3StorageService:
                 # Validate checksum
                 if computed_checksum != expected_checksum:
                     raise StorageChecksumMismatchError(
-                        file_path=storage_ref,
-                        expected=expected_checksum,
-                        actual=computed_checksum,
+                        storage_ref,
+                        expected_checksum,
+                        computed_checksum,
                     )
 
                 # Prepare metadata
@@ -215,7 +214,7 @@ class S3StorageService:
         except (StorageChecksumMismatchError, StorageAlreadyExistsError):
             raise
         except Exception as e:
-            raise StorageUploadError(f"S3 upload failed: {str(e)}") from e
+            raise StorageUploadError(storage_ref, f"Upload failed: {e}") from e
 
     async def download(self, storage_ref: str) -> AsyncIterator[bytes]:
         """
@@ -245,16 +244,13 @@ class S3StorageService:
 
                 except ClientError as e:
                     if e.response["Error"]["Code"] == "NoSuchKey":
-                        raise StorageNotFoundError(
-                            file_path=storage_ref,
-                            message=e.response["Error"]["Message"],
-                        ) from e
+                        raise StorageNotFoundError(f"File not found: {storage_ref}") from e
                     raise
 
         except StorageNotFoundError:
             raise
         except Exception as e:
-            raise StorageDownloadError(f"S3 download failed: {str(e)}") from e
+            raise StorageDownloadError(storage_ref, f"Download failed: {e}") from e
 
     async def delete(self, storage_ref: str) -> bool:
         """
@@ -284,7 +280,7 @@ class S3StorageService:
                 return True
 
         except Exception as e:
-            raise StorageDeleteError(f"S3 delete failed: {str(e)}") from e
+            raise StorageDeleteError(storage_ref, f"Delete failed: {e}") from e
 
     async def exists(self, storage_ref: str) -> bool:
         """
@@ -336,10 +332,10 @@ class S3StorageService:
 
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
-                raise StorageNotFoundError(f"Object not found: {storage_ref}") from e
+                raise StorageNotFoundError(f"File not found: {storage_ref}") from e
             raise
         except Exception as e:
-            raise StorageDownloadError(f"Failed to get metadata: {str(e)}") from e
+            raise StorageDownloadError(storage_ref, f"Failed to get metadata: {e}") from e
 
     async def generate_download_url(
         self, storage_ref: str, expiration: timedelta = timedelta(hours=1)
@@ -364,9 +360,7 @@ class S3StorageService:
                     await s3.head_object(Bucket=self.bucket, Key=storage_ref)
                 except ClientError as e:
                     if e.response["Error"]["Code"] == "404":
-                        raise StorageNotFoundError(
-                            f"Object not found: {storage_ref}"
-                        ) from e
+                        raise StorageNotFoundError(f"File not found: {storage_ref}") from e
                     raise
 
                 # Generate pre-signed URL
@@ -381,4 +375,4 @@ class S3StorageService:
         except StorageNotFoundError:
             raise
         except Exception as e:
-            raise StorageDownloadError(f"Failed to generate URL: {str(e)}") from e
+            raise StorageDownloadError(storage_ref, f"Failed to generate URL: {e}") from e

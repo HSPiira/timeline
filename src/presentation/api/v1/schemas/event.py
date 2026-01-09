@@ -1,6 +1,5 @@
 import json
 import os
-
 # Import sanitization utilities
 import sys
 from datetime import datetime
@@ -8,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from src.shared.utils import utc_now
 from src.shared.utils.sanitization import sanitize_input, validate_identifier
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -56,15 +56,12 @@ class EventCreate(BaseModel):
     @classmethod
     def validate_event_time(cls, v: datetime) -> datetime:
         """Validate event time."""
-        if v > datetime.now(v.tzinfo):
+        now = utc_now()
+        if v > now:
             raise ValueError("Event time cannot be in the future")
 
         # Check if too old (e.g., more than 10 years)
-        years_ago = (
-            datetime.now(v.tzinfo).year - v.year
-            if v.tzinfo
-            else datetime.now().year - v.year
-        )
+        years_ago = now.year - v.year
         if years_ago > 10:
             raise ValueError("Event time cannot be more than 10 years in the past")
 

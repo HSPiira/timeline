@@ -5,10 +5,11 @@ Revises: 063b9eee42d4
 Create Date: 2025-12-29 08:56:52.266958
 
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
+from typing import Union
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -20,9 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.alter_column(
-        "oauth_provider_config", "created_at", server_default=sa.text("now()")
-    )
+    op.alter_column("oauth_provider_config", "created_at", server_default=sa.text("now()"))
     op.alter_column(
         "oauth_provider_config",
         "updated_at",

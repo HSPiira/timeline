@@ -114,9 +114,7 @@ class UserRoleResponse(BaseModel):
 class RolePermissionAssign(BaseModel):
     """Schema for assigning permissions to a role"""
 
-    permission_ids: list[str] = Field(
-        ..., description="List of permission IDs to assign"
-    )
+    permission_ids: list[str] = Field(..., description="List of permission IDs to assign")
 
 
 class RolePermissionResponse(BaseModel):

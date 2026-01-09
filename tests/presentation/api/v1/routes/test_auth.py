@@ -1,4 +1,5 @@
 """Test authentication endpoints"""
+
 import pytest
 from fastapi import status
 
@@ -11,8 +12,8 @@ async def test_login_success(client, test_tenant, test_user):
         json={
             "tenant_code": test_tenant.code,
             "username": test_user.username,
-            "password": "testpass123"
-        }
+            "password": "testpass123",
+        },
     )
 
     assert response.status_code == 200
@@ -26,11 +27,7 @@ async def test_login_invalid_credentials(client, test_tenant):
     """Test login with invalid credentials"""
     response = await client.post(
         "/auth/token",
-        json={
-            "tenant_code": test_tenant.code,
-            "username": "testuser",
-            "password": "wrongpassword"
-        }
+        json={"tenant_code": test_tenant.code, "username": "testuser", "password": "wrongpassword"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -41,11 +38,7 @@ async def test_login_invalid_tenant(client):
     """Test login with non-existent tenant"""
     response = await client.post(
         "/auth/token",
-        json={
-            "tenant_code": "NONEXISTENT",
-            "username": "testuser",
-            "password": "testpass123"
-        }
+        json={"tenant_code": "NONEXISTENT", "username": "testuser", "password": "testpass123"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -61,8 +54,8 @@ async def test_rate_limiting_login(client, test_tenant, test_user):
             json={
                 "tenant_code": test_tenant.code,
                 "username": test_user.username,
-                "password": "wrongpassword"
-            }
+                "password": "wrongpassword",
+            },
         )
 
         if i < 5:

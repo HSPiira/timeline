@@ -1,4 +1,5 @@
 """Security middleware for HTTP security headers and request validation"""
+
 import logging
 import uuid
 from collections.abc import Callable
@@ -61,9 +62,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.scheme == "https" or (
             hasattr(settings, "environment") and settings.environment == "production"
         ):
-            response.headers[
-                "Strict-Transport-Security"
-            ] = "max-age=63072000; includeSubDomains; preload"  # 2 years
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=63072000; includeSubDomains; preload"  # 2 years
+            )
 
         # Content Security Policy
         # Relax CSP for API documentation endpoints
@@ -140,7 +141,10 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                         status_code=413,
                         content={
                             "error": "PAYLOAD_TOO_LARGE",
-                            "message": f"Request body too large. Maximum size: {self.max_request_size} bytes",
+                            "message": (
+                                f"Request body too large. "
+                                f"Maximum size: {self.max_request_size} bytes"
+                            ),
                             "details": {
                                 "max_size_bytes": self.max_request_size,
                                 "received_size_bytes": content_length_int,

@@ -1,19 +1,50 @@
 from __future__ import annotations
 
-from datetime import UTC
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.persistence.models.document import Document
-from src.infrastructure.persistence.repositories.base import BaseRepository
+from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
+from src.shared.enums import AuditAction
+from src.shared.utils import utc_now
+
+if TYPE_CHECKING:
+    from src.application.services.system_audit_service import SystemAuditService
 
 
-class DocumentRepository(BaseRepository[Document]):
-    """Repository for Document entity following LSP"""
+class DocumentRepository(AuditableRepository[Document]):
+    """Repository for Document entity with automatic audit tracking."""
 
-    def __init__(self, db: AsyncSession):
-        super().__init__(db, Document)
+    def __init__(
+        self,
+        db: AsyncSession,
+        audit_service: "SystemAuditService | None" = None,
+        *,
+        enable_audit: bool = True,
+    ):
+        super().__init__(db, Document, audit_service, enable_audit=enable_audit)
+
+    # Auditable implementation
+    def _get_entity_type(self) -> str:
+        return "document"
+
+    def _get_tenant_id(self, obj: Document) -> str:
+        return obj.tenant_id
+
+    def _serialize_for_audit(self, obj: Document) -> dict[str, Any]:
+        return {
+            "id": obj.id,
+            "filename": obj.filename,
+            "original_filename": obj.original_filename,
+            "content_type": obj.content_type,
+            "size_bytes": obj.size_bytes,
+            "subject_id": obj.subject_id,
+            "event_id": obj.event_id,
+            "version": obj.version,
+            # Note: storage_path and checksum excluded for security
+        }
 
     async def get_by_subject(
         self, subject_id: str, tenant_id: str, include_deleted: bool = False
@@ -74,11 +105,11 @@ class DocumentRepository(BaseRepository[Document]):
         return list(result.scalars().all())
 
     async def soft_delete(self, document_id: str) -> Document | None:
-        """Soft delete a document"""
-        from datetime import datetime
-
+        """Soft delete a document with audit event."""
         document = await self.get_by_id(document_id)
         if document:
-            document.deleted_at = datetime.now(UTC)
-            return await self.update(document)
+            document.deleted_at = utc_now()
+            updated = await self.update(document)
+            await self.emit_custom_audit(updated, AuditAction.DELETED)
+            return updated
         return None

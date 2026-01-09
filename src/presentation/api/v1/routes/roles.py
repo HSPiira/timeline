@@ -4,19 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.presentation.api.dependencies import get_current_tenant, get_current_user
-from src.infrastructure.persistence.database import get_db, get_db_transactional
+from src.infrastructure.persistence.database import (get_db,
+                                                     get_db_transactional)
 from src.infrastructure.persistence.models.role import Role
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.permission_repo import PermissionRepository
-from src.infrastructure.persistence.repositories.role_repo import RoleRepository
-from src.presentation.api.v1.schemas.role import (
-    RoleCreate,
-    RolePermissionAssign,
-    RoleResponse,
-    RoleUpdate,
-    RoleWithPermissions,
-)
+from src.infrastructure.persistence.repositories.permission_repo import \
+    PermissionRepository
+from src.infrastructure.persistence.repositories.role_repo import \
+    RoleRepository
+from src.presentation.api.dependencies import (get_current_tenant,
+                                               get_current_user)
+from src.presentation.api.v1.schemas.role import (RoleCreate,
+                                                  RolePermissionAssign,
+                                                  RoleResponse, RoleUpdate,
+                                                  RoleWithPermissions)
 from src.presentation.api.v1.schemas.token import TokenPayload
 
 router = APIRouter()
@@ -57,9 +58,7 @@ async def create_role(
         if data.permission_codes:
             invalid_codes = []
             for perm_code in data.permission_codes:
-                permission = await perm_repo.get_by_code_and_tenant(
-                    perm_code, current_tenant.id
-                )
+                permission = await perm_repo.get_by_code_and_tenant(perm_code, current_tenant.id)
                 if permission:
                     await perm_repo.assign_permission_to_role(
                         role_id=created_role.id,
@@ -115,9 +114,7 @@ async def get_role(
 
     role = await role_repo.get_by_id(role_id)
     if not role or role.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     # Get permissions for this role
     permissions = await perm_repo.get_permissions_for_role(role_id, current_tenant.id)
@@ -151,9 +148,7 @@ async def update_role(
 
     role = await role_repo.get_by_id(role_id)
     if not role or role.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     # Prevent modification of system roles
     if role.is_system:
@@ -185,9 +180,7 @@ async def delete_role(
 
     role = await role_repo.get_by_id(role_id)
     if not role or role.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     # Prevent deletion of system roles
     if role.is_system:
@@ -212,9 +205,7 @@ async def assign_permissions_to_role(
 
     role = await role_repo.get_by_id(role_id)
     if not role or role.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     # Assign each permission
     for permission_id in data.permission_ids:
@@ -238,9 +229,7 @@ async def assign_permissions_to_role(
     return {"message": "Permissions assigned successfully"}
 
 
-@router.delete(
-    "/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_permission_from_role(
     role_id: str,
     permission_id: str,
@@ -254,16 +243,12 @@ async def remove_permission_from_role(
 
     role = await role_repo.get_by_id(role_id)
     if not role or role.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     # Validate permission exists and belongs to tenant
     permission = await perm_repo.get_by_id(permission_id)
     if not permission or permission.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found")
 
     success = await perm_repo.remove_permission_from_role(role_id, permission_id)
     if not success:

@@ -1,4 +1,5 @@
 """Pydantic schemas for OAuth provider configuration API"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -9,16 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class OAuthProviderConfigCreate(BaseModel):
     """Schema for creating OAuth provider configuration"""
 
-    provider_type: str = Field(
-        ..., description="Provider identifier (gmail, outlook, yahoo)"
-    )
+    provider_type: str = Field(..., description="Provider identifier (gmail, outlook, yahoo)")
     client_id: str = Field(..., description="OAuth client ID from provider console")
-    client_secret: str = Field(
-        ..., description="OAuth client secret from provider console"
-    )
-    redirect_uri: str = Field(
-        ..., description="OAuth redirect URI (must match provider console)"
-    )
+    client_secret: str = Field(..., description="OAuth client secret from provider console")
+    redirect_uri: str = Field(..., description="OAuth redirect URI (must match provider console)")
     scopes: list[str] | None = Field(
         None, description="Custom scopes (uses provider defaults if not specified)"
     )
@@ -93,9 +88,7 @@ class OAuthProviderListResponse(BaseModel):
 class OAuthAuthorizeRequest(BaseModel):
     """Schema for initiating OAuth flow"""
 
-    return_url: str | None = Field(
-        None, description="URL to redirect user after OAuth completion"
-    )
+    return_url: str | None = Field(None, description="URL to redirect user after OAuth completion")
 
     @field_validator("return_url")
     @classmethod
@@ -176,9 +169,5 @@ class OAuthRotateCredentialsResponse(BaseModel):
     old_version: int
     new_version: int
     provider_config_id: str
-    migration_required: bool = Field(
-        ..., description="Whether existing connections need migration"
-    )
-    affected_accounts: int = Field(
-        ..., description="Number of email accounts using old version"
-    )
+    migration_required: bool = Field(..., description="Whether existing connections need migration")
+    affected_accounts: int = Field(..., description="Number of email accounts using old version")

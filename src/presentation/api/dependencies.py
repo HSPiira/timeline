@@ -1,22 +1,28 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.security.jwt import verify_token
-from src.infrastructure.persistence.database import get_db, get_db_transactional
-from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.document_repo import DocumentRepository
-from src.infrastructure.persistence.repositories.event_repo import EventRepository
-from src.infrastructure.persistence.repositories.event_schema_repo import EventSchemaRepository
-from src.infrastructure.persistence.repositories.subject_repo import SubjectRepository
-from src.infrastructure.persistence.repositories.tenant_repo import TenantRepository
-from src.infrastructure.persistence.repositories.user_repo import UserRepository
-from src.presentation.api.v1.schemas.token import TokenPayload
 from src.application.services.authorization_service import AuthorizationService
-from src.infrastructure.cache.redis_cache import CacheService
+from src.application.services.hash_service import HashService
+from src.application.services.tenant_creation_service import TenantCreationService
+from src.application.services.tenant_initialization_service import TenantInitializationService
 from src.application.use_cases.documents.document_operations import DocumentService
 from src.application.use_cases.events.create_event import EventService
-from src.application.services.hash_service import HashService
+from src.infrastructure.cache.redis_cache import CacheService
+from src.infrastructure.persistence.database import get_db, get_db_transactional
+from src.infrastructure.persistence.models.tenant import Tenant
+from src.infrastructure.persistence.repositories import (
+    DocumentRepository,
+    EventRepository,
+    EventSchemaRepository,
+    SubjectRepository,
+    TenantRepository,
+    UserRepository,
+)
+from src.infrastructure.security.jwt import verify_token
+from src.presentation.api.v1.schemas.token import TokenPayload
+from src.shared.context import set_current_user
+from src.shared.enums import ActorType
 
 security = HTTPBearer()
 
@@ -48,15 +54,33 @@ def set_cache_service(cache_service: CacheService):
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> TokenPayload:
     """
     Validate JWT token and return authenticated user payload.
     Token must contain 'sub' (user_id) and 'tenant_id' claims.
+
+    Also sets the user context for audit tracking via contextvars.
+    This allows audit events to automatically capture the current user
+    without explicitly passing user info through the call stack.
     """
     try:
         payload = verify_token(credentials.credentials)
         token_data = TokenPayload(**payload)
+
+        # Set user context for audit tracking
+        # Extract client info from request for audit metadata
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+
+        set_current_user(
+            user_id=token_data.sub,
+            actor_type=ActorType.USER,
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+
         return token_data
     except ValueError as e:
         raise HTTPException(
@@ -220,7 +244,6 @@ async def get_document_service(
     cache: CacheService = Depends(get_cache_service),
 ) -> "DocumentService":
     """Document service dependency with caching"""
-    from src.application.use_cases.documents.document_operations import DocumentService
 
     return DocumentService(
         storage_service=storage,
@@ -235,7 +258,6 @@ async def get_document_service_transactional(
     cache: CacheService = Depends(get_cache_service),
 ) -> "DocumentService":
     """Document service dependency with transaction and caching"""
-    from src.application.use_cases.documents.document_operations import DocumentService
 
     return DocumentService(
         storage_service=storage,
@@ -279,3 +301,20 @@ async def get_authz_service(
 ) -> AuthorizationService:
     """Get authorization service for manual permission checks with caching"""
     return AuthorizationService(db, cache_service=cache)
+
+
+async def get_tenant_creation_service(
+    db: AsyncSession = Depends(get_db_transactional),
+    cache: CacheService = Depends(get_cache_service),
+) -> TenantCreationService:
+    """Tenant creation service with transaction management.
+
+    Note: Audit is disabled for tenant/user creation during bootstrap
+    because the audit subject doesn't exist yet (chicken-and-egg problem).
+    The tenant initialization itself is tracked via the audit schema creation.
+    """
+    return TenantCreationService(
+        tenant_repo=TenantRepository(db, cache_service=cache, enable_audit=False),
+        user_repo=UserRepository(db, enable_audit=False),
+        init_service=TenantInitializationService(db),
+    )

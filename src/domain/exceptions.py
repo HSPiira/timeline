@@ -44,7 +44,7 @@ class TimelineException(Exception):
 class ValidationException(TimelineException):
     """Raised when input validation fails."""
 
-    def __init__(self, message: str, field: str | None = None, **kwargs):
+    def __init__(self, message: str, field: str | None = None):
         details = {"field": field} if field else {}
         super().__init__(message, "VALIDATION_ERROR", details)
 
@@ -61,9 +61,7 @@ class AuthorizationException(TimelineException):
 
     def __init__(self, resource: str, action: str):
         message = f"Permission denied: {action} on {resource}"
-        super().__init__(
-            message, "AUTHORIZATION_ERROR", {"resource": resource, "action": action}
-        )
+        super().__init__(message, "AUTHORIZATION_ERROR", {"resource": resource, "action": action})
 
 
 class TenantNotFoundException(TimelineException):
@@ -102,7 +100,7 @@ class EventChainBrokenException(TimelineException):
 class SchemaValidationException(TimelineException):
     """Raised when schema validation fails."""
 
-    def __init__(self, schema_type: str, validation_errors: list):
+    def __init__(self, schema_type: str, validation_errors: list[Any]):
         super().__init__(
             f"Schema validation failed for {schema_type}",
             "SCHEMA_VALIDATION_ERROR",
@@ -119,7 +117,7 @@ class PermissionDeniedError(TimelineException):
         resource: str | None = None,
         action: str | None = None,
     ):
-        details = {}
+        details: dict[str, Any] = {}
         if resource:
             details["resource"] = resource
         if action:

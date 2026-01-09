@@ -5,10 +5,10 @@ Revises:
 Create Date: 2025-12-14 09:22:13.224323
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -67,15 +67,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        op.f("ix_subject_external_ref"), "subject", ["external_ref"], unique=False
-    )
-    op.create_index(
-        op.f("ix_subject_subject_type"), "subject", ["subject_type"], unique=False
-    )
-    op.create_index(
-        op.f("ix_subject_tenant_id"), "subject", ["tenant_id"], unique=False
-    )
+    op.create_index(op.f("ix_subject_external_ref"), "subject", ["external_ref"], unique=False)
+    op.create_index(op.f("ix_subject_subject_type"), "subject", ["subject_type"], unique=False)
+    op.create_index(op.f("ix_subject_tenant_id"), "subject", ["tenant_id"], unique=False)
     op.create_index(
         "ix_subject_tenant_type", "subject", ["tenant_id", "subject_type"], unique=False
     )
@@ -112,12 +106,8 @@ def upgrade() -> None:
     op.create_index(op.f("ix_event_hash"), "event", ["hash"], unique=True)
     op.create_index(op.f("ix_event_subject_id"), "event", ["subject_id"], unique=False)
     op.create_index(op.f("ix_event_tenant_id"), "event", ["tenant_id"], unique=False)
-    op.create_index(
-        "ix_event_subject_time", "event", ["subject_id", "event_time"], unique=False
-    )
-    op.create_index(
-        "ix_event_tenant_subject", "event", ["tenant_id", "subject_id"], unique=False
-    )
+    op.create_index("ix_event_subject_time", "event", ["subject_id", "event_time"], unique=False)
+    op.create_index("ix_event_tenant_subject", "event", ["tenant_id", "subject_id"], unique=False)
 
     # Create document table
     op.create_table(
@@ -162,21 +152,11 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        op.f("ix_document_checksum"), "document", ["checksum"], unique=False
-    )
-    op.create_index(
-        op.f("ix_document_document_type"), "document", ["document_type"], unique=False
-    )
-    op.create_index(
-        op.f("ix_document_event_id"), "document", ["event_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_document_subject_id"), "document", ["subject_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_document_tenant_id"), "document", ["tenant_id"], unique=False
-    )
+    op.create_index(op.f("ix_document_checksum"), "document", ["checksum"], unique=False)
+    op.create_index(op.f("ix_document_document_type"), "document", ["document_type"], unique=False)
+    op.create_index(op.f("ix_document_event_id"), "document", ["event_id"], unique=False)
+    op.create_index(op.f("ix_document_subject_id"), "document", ["subject_id"], unique=False)
+    op.create_index(op.f("ix_document_tenant_id"), "document", ["tenant_id"], unique=False)
     op.create_index(
         "ix_document_tenant_checksum",
         "document",

@@ -19,13 +19,9 @@ class Role(MultiTenantModel, Base):
     __tablename__ = "role"
 
     # Role metadata
-    code: Mapped[str] = mapped_column(
-        String, nullable=False
-    )  # e.g., 'admin', 'auditor', 'agent'
+    code: Mapped[str] = mapped_column(String, nullable=False)  # e.g., 'admin', 'auditor', 'agent'
     name: Mapped[str] = mapped_column(String, nullable=False)  # Display name
-    description: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # Optional description
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)  # Optional description
     is_system: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )  # System roles cannot be modified or deleted
@@ -33,6 +29,4 @@ class Role(MultiTenantModel, Base):
         Boolean, nullable=False, default=True
     )  # Soft delete flag
 
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "code", name="uq_role_tenant_code"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_role_tenant_code"),)

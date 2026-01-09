@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import (BigInteger, Boolean, DateTime, ForeignKey, Index,
+                        Integer, String)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.persistence.database import Base
@@ -40,18 +41,14 @@ class Document(MultiTenantModel, Base):
     )  # SHA-256 for integrity
 
     # Storage
-    storage_ref: Mapped[str] = mapped_column(
-        String, nullable=False
-    )  # Path in S3/storage system
+    storage_ref: Mapped[str] = mapped_column(String, nullable=False)  # Path in S3/storage system
 
     # Versioning
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     parent_document_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("document.id"), nullable=True
     )
-    is_latest_version: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_latest_version: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Additional audit fields (beyond MultiTenantModel)
     created_by: Mapped[str | None] = mapped_column(

@@ -1,18 +1,16 @@
 """Unit tests for S3StorageService"""
+
 import io
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
+
+from src.infrastructure.exceptions import (StorageAlreadyExistsError,
+                                           StorageChecksumMismatchError,
+                                           StorageNotFoundError)
 from src.infrastructure.external.storage.s3_storage import S3StorageService
-from src.infrastructure.exceptions import (
-    StorageNotFoundError,
-    StorageChecksumMismatchError,
-    StorageUploadError,
-    StorageAlreadyExistsError,
-    StorageDownloadError,
-    StorageDeleteError
-)
 
 
 @pytest.fixture
@@ -23,7 +21,7 @@ def s3_service():
         region="us-east-1",
         endpoint_url="http://localhost:9000",  # MinIO
         access_key="test-access-key",
-        secret_key="test-secret-key"
+        secret_key="test-secret-key",
     )
 
 
@@ -66,7 +64,7 @@ class TestS3StorageUpload:
         mock_s3_client.head_object = AsyncMock(
             side_effect=[
                 ClientError({"Error": {"Code": "404"}}, "head_object"),  # First check
-                {"ContentLength": 35, "LastModified": datetime.utcnow()}  # After upload
+                {"ContentLength": 35, "LastModified": datetime.now(UTC)()},  # After upload
             ]
         )
 
@@ -79,7 +77,7 @@ class TestS3StorageUpload:
                 storage_ref=storage_ref,
                 expected_checksum=sample_checksum,
                 content_type=content_type,
-                metadata={"custom_key": "custom_value"}
+                metadata={"custom_key": "custom_value"},
             )
 
         # THEN
@@ -122,7 +120,7 @@ class TestS3StorageUpload:
                     file_data=sample_file_data,
                     storage_ref=storage_ref,
                     expected_checksum=wrong_checksum,
-                    content_type="text/plain"
+                    content_type="text/plain",
                 )
 
             assert "Checksum mismatch" in str(exc_info.value)
@@ -139,8 +137,8 @@ class TestS3StorageUpload:
         # GIVEN - Object already exists
         existing_metadata = {
             "ContentLength": 35,
-            "LastModified": datetime.utcnow(),
-            "Metadata": {"sha256": sample_checksum}
+            "LastModified": datetime.now(UTC),
+            "Metadata": {"sha256": sample_checksum},
         }
 
         mock_s3_client = AsyncMock()
@@ -154,7 +152,7 @@ class TestS3StorageUpload:
                 file_data=sample_file_data,
                 storage_ref="tenants/acme/documents/doc_789/v1/test.txt",
                 expected_checksum=sample_checksum,
-                content_type="text/plain"
+                content_type="text/plain",
             )
 
         # THEN - Should return existing metadata (no upload)
@@ -174,8 +172,8 @@ class TestS3StorageUpload:
         # GIVEN - Object exists with different checksum
         existing_metadata = {
             "ContentLength": 35,
-            "LastModified": datetime.utcnow(),
-            "Metadata": {"sha256": "different_checksum"}
+            "LastModified": datetime.now(UTC),
+            "Metadata": {"sha256": "different_checksum"},
         }
 
         mock_s3_client = AsyncMock()
@@ -190,7 +188,7 @@ class TestS3StorageUpload:
                     file_data=sample_file_data,
                     storage_ref="tenants/acme/documents/doc_abc/v1/test.txt",
                     expected_checksum=sample_checksum,
-                    content_type="text/plain"
+                    content_type="text/plain",
                 )
 
 
@@ -213,9 +211,7 @@ class TestS3StorageDownload:
             side_effect=[sample_file_data.read(), b""]  # Return content then EOF
         )
 
-        mock_response = {
-            "Body": mock_stream
-        }
+        mock_response = {"Body": mock_stream}
 
         mock_s3_client = AsyncMock()
         mock_s3_client.get_object = AsyncMock(return_value=mock_response)
@@ -274,11 +270,8 @@ class TestS3StorageMetadata:
         head_response = {
             "ContentLength": 35,
             "ContentType": "text/plain",
-            "LastModified": datetime.utcnow(),
-            "Metadata": {
-                "sha256": "test_checksum",
-                "author": "test_user"
-            }
+            "LastModified": datetime.now(UTC),
+            "Metadata": {"sha256": "test_checksum", "author": "test_user"},
         }
 
         mock_s3_client = AsyncMock()
@@ -363,10 +356,7 @@ class TestS3StorageDelete:
 
         # THEN
         assert result is True
-        mock_s3_client.delete_object.assert_called_once_with(
-            Bucket="test-bucket",
-            Key=storage_ref
-        )
+        mock_s3_client.delete_object.assert_called_once_with(Bucket="test-bucket", Key=storage_ref)
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent_object(self, s3_service):
@@ -465,7 +455,7 @@ class TestS3ServiceConfiguration:
             region="us-east-1",
             endpoint_url="http://localhost:9000",
             access_key="test-key",
-            secret_key="test-secret"
+            secret_key="test-secret",
         )
 
         # THEN
@@ -484,10 +474,7 @@ class TestS3ServiceConfiguration:
         """
         # GIVEN/WHEN
         service = S3StorageService(
-            bucket="my-bucket",
-            region="us-west-2",
-            access_key="aws-key",
-            secret_key="aws-secret"
+            bucket="my-bucket", region="us-west-2", access_key="aws-key", secret_key="aws-secret"
         )
 
         # THEN

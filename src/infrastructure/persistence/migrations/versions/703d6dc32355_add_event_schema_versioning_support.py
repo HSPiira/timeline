@@ -5,10 +5,10 @@ Revises: ba0e2857597d
 Create Date: 2025-12-24 01:14:08.764867
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -55,9 +55,7 @@ def downgrade() -> None:
     op.alter_column("event_schema", "is_active", server_default="true")
 
     # 2. Remove created_by column from event_schema
-    op.drop_constraint(
-        "fk_event_schema_created_by_user", "event_schema", type_="foreignkey"
-    )
+    op.drop_constraint("fk_event_schema_created_by_user", "event_schema", type_="foreignkey")
     op.drop_column("event_schema", "created_by")
 
     # 1. Remove schema_version column from event

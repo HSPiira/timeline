@@ -1,13 +1,18 @@
 """Storage service factory for backend selection."""
+
+from __future__ import annotations
+
 from src.application.interfaces.storage import IStorageService
 from src.infrastructure.external.storage.local_storage import LocalStorageService
+from src.infrastructure.config.settings import Settings
+    
 
 
 class StorageFactory:
     """Factory for creating storage service instances based on configuration."""
 
     @staticmethod
-    def create_storage_service(settings) -> IStorageService:
+    def create_storage_service(settings: "Settings") -> IStorageService:
         """
         Create storage service based on settings.
 
@@ -25,10 +30,12 @@ class StorageFactory:
         if backend == "local":
             if not settings.storage_root:
                 raise ValueError("STORAGE_ROOT required for local backend")
-            return LocalStorageService(storage_root=settings.storage_root)
+            return LocalStorageService(
+                storage_root=settings.storage_root,
+                base_url=settings.storage_base_url
+            )
 
         elif backend == "s3":
-            # Import here to avoid dependency if not using S3
             from src.infrastructure.external.storage.s3_storage import S3StorageService
 
             if not settings.s3_bucket:
@@ -43,6 +50,4 @@ class StorageFactory:
             )
 
         else:
-            raise ValueError(
-                f"Unknown storage backend: {backend}. " f"Supported: 'local', 's3'"
-            )
+            raise ValueError(f"Unknown storage backend: {backend}. Supported: 'local', 's3'")

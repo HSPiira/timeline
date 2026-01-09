@@ -10,12 +10,8 @@ class UserCreate(BaseModel):
     username: str = Field(
         ..., min_length=3, max_length=50, description="Unique username within tenant"
     )
-    email: EmailStr = Field(
-        ..., description="User email address (unique within tenant)"
-    )
-    password: str = Field(
-        ..., min_length=8, description="User password (min 8 characters)"
-    )
+    email: EmailStr = Field(..., description="User email address (unique within tenant)")
+    password: str = Field(..., min_length=8, description="User password (min 8 characters)")
 
 
 class UserUpdate(BaseModel):

@@ -22,10 +22,7 @@ from src.domain.value_objects import (
     EventChain,
     EventType,
     Hash,
-    SubjectId,
-    TenantCode,
-    TenantId,
-)
+    TenantCode)
 
 __all__ = [
     # Entities
@@ -33,8 +30,6 @@ __all__ = [
     "TenantEntity",
     # Value Objects
     "TenantCode",
-    "TenantId",
-    "SubjectId",
     "EventType",
     "Hash",
     "EventChain",

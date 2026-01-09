@@ -1,11 +1,17 @@
 """Email provider factory for instantiating providers"""
+
 from typing import ClassVar
 
+from src.infrastructure.external.email.protocols import (
+    EmailProviderConfig,
+    IEmailProvider
+)
+from src.infrastructure.external.email.providers import (
+    GmailProvider,
+    IMAPProvider,
+    OutlookProvider
+)
 from src.shared.telemetry.logging import get_logger
-from src.infrastructure.external.email.protocols import EmailProviderConfig, IEmailProvider
-from src.infrastructure.external.email.providers.gmail_provider import GmailProvider
-from src.infrastructure.external.email.providers.imap_provider import IMAPProvider
-from src.infrastructure.external.email.providers.outlook_provider import OutlookProvider
 
 logger = get_logger(__name__)
 
@@ -40,17 +46,16 @@ class EmailProviderFactory:
 
         if not provider_class:
             raise ValueError(
-                f"Unsupported provider: {config.provider_type}. "
-                f"Supported: {list(cls._providers.keys())}"
+                "Unsupported provider: %s. Supported: %s",
+                config.provider_type,
+                list(cls._providers.keys())
             )
 
-        logger.info(f"Creating {provider_class.__name__} for {config.email_address}")
+        logger.info("Creating %s for %s", provider_class.__name__, config.email_address)
         return provider_class()
 
     @classmethod
-    def register_provider(
-        cls, provider_type: str, provider_class: type[IEmailProvider]
-    ) -> None:
+    def register_provider(cls, provider_type: str, provider_class: type[IEmailProvider]) -> None:
         """
         Register a custom email provider.
 
@@ -59,7 +64,7 @@ class EmailProviderFactory:
             provider_class: Provider class implementing IEmailProvider
         """
         cls._providers[provider_type.lower()] = provider_class
-        logger.info(f"Registered custom provider: {provider_type}")
+        logger.info("Registered custom provider: %s", provider_type)
 
     @classmethod
     def list_supported_providers(cls) -> list[str]:

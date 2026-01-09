@@ -1,31 +1,31 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
+                     status)
 from fastapi.responses import StreamingResponse
 
-from src.presentation.api.dependencies import (
-    get_current_tenant,
-    get_document_repo,
-    get_document_repo_transactional,
-    get_document_service_transactional,
-    get_event_repo,
-    get_subject_repo,
-    require_permission,
-)
+from src.application.use_cases.documents.document_operations import \
+    DocumentService
 from src.infrastructure.config.settings import get_settings
-from src.infrastructure.exceptions import (
-    StorageChecksumMismatchError,
-    StorageNotFoundError,
-    StorageUploadError,
-)
-from src.shared.telemetry.logging import get_logger
+from src.infrastructure.exceptions import (StorageChecksumMismatchError,
+                                           StorageNotFoundError,
+                                           StorageUploadError)
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.document_repo import DocumentRepository
-from src.infrastructure.persistence.repositories.event_repo import EventRepository
-from src.infrastructure.persistence.repositories.subject_repo import SubjectRepository
-from src.presentation.api.v1.schemas.document import DocumentCreate, DocumentResponse, DocumentUpdate
+from src.infrastructure.persistence.repositories.document_repo import \
+    DocumentRepository
+from src.infrastructure.persistence.repositories.event_repo import \
+    EventRepository
+from src.infrastructure.persistence.repositories.subject_repo import \
+    SubjectRepository
+from src.presentation.api.dependencies import (
+    get_current_tenant, get_document_repo, get_document_repo_transactional,
+    get_document_service_transactional, get_event_repo, get_subject_repo,
+    require_permission)
+from src.presentation.api.v1.schemas.document import (DocumentCreate,
+                                                      DocumentResponse,
+                                                      DocumentUpdate)
 from src.presentation.api.v1.schemas.storage import DocumentUploadResponse
-from src.application.use_cases.documents.document_operations import DocumentService
+from src.shared.telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -40,17 +40,12 @@ router = APIRouter()
     dependencies=[Depends(require_permission("document", "create"))],
 )
 async def upload_document(
-    doc_service: Annotated[
-        DocumentService, Depends(get_document_service_transactional)
-    ],
+    doc_service: Annotated[DocumentService, Depends(get_document_service_transactional)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     file: UploadFile = File(..., description="File to upload"),
     subject_id: str = Form(..., description="Subject ID this document belongs to"),
-    document_type: str = Form(
-        ..., description="Document type (invoice, contract, etc.)"
-    ),
-    event_id: str
-    | None = Form(None, description="Optional event ID to link document to"),
+    document_type: str = Form(..., description="Document type (invoice, contract, etc.)"),
+    event_id: str | None = Form(None, description="Optional event ID to link document to"),
 ):
     """
     Upload a document file with metadata.
@@ -78,7 +73,10 @@ async def upload_document(
     if file_size > settings.max_upload_size:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size {file_size} bytes exceeds maximum allowed size of {settings.max_upload_size} bytes",
+            detail=(
+                f"File size {file_size} bytes exceeds maximum allowed "
+                f"size of {settings.max_upload_size} bytes"
+            ),
         )
 
     # Validate MIME type (if not wildcard)
@@ -87,7 +85,10 @@ async def upload_document(
         if file.content_type not in allowed_types:
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=f"MIME type '{file.content_type}' not allowed. Allowed types: {settings.allowed_mime_types}",
+                detail=(
+                    f"MIME type '{file.content_type}' not allowed. "
+                    f"Allowed types: {settings.allowed_mime_types}"
+                    ),
             )
 
     # Validate required file metadata
@@ -134,9 +135,7 @@ async def upload_document(
 
     except ValueError as e:
         # Business logic errors (duplicate, invalid subject, etc.)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except StorageChecksumMismatchError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -162,9 +161,7 @@ async def upload_document(
 )
 async def download_document(
     document_id: str,
-    doc_service: Annotated[
-        DocumentService, Depends(get_document_service_transactional)
-    ],
+    doc_service: Annotated[DocumentService, Depends(get_document_service_transactional)],
     repo: Annotated[DocumentRepository, Depends(get_document_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
@@ -184,14 +181,10 @@ async def download_document(
     document = await repo.get_by_id(document_id)
 
     if not document or document.tenant_id != tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
     if document.deleted_at:
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE, detail="Document has been deleted"
-        )
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Document has been deleted")
 
     try:
         # Stream file from storage

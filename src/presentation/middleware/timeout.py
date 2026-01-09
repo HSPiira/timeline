@@ -1,4 +1,5 @@
 """Request timeout middleware."""
+
 import asyncio
 import time
 from collections.abc import Callable

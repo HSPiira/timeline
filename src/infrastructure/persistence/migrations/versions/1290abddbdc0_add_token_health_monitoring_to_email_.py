@@ -5,10 +5,11 @@ Revises: 68c22898a728
 Create Date: 2025-12-27 00:29:57.186647
 
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
+from typing import Union
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -27,22 +28,14 @@ def upgrade() -> None:
     )
     op.add_column(
         "email_account",
-        sa.Column(
-            "token_refresh_count", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("token_refresh_count", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
         "email_account",
-        sa.Column(
-            "token_refresh_failures", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("token_refresh_failures", sa.Integer(), nullable=False, server_default="0"),
     )
-    op.add_column(
-        "email_account", sa.Column("last_auth_error", sa.String(), nullable=True)
-    )
-    op.add_column(
-        "email_account", sa.Column("last_auth_error_at", sa.DateTime(), nullable=True)
-    )
+    op.add_column("email_account", sa.Column("last_auth_error", sa.String(), nullable=True))
+    op.add_column("email_account", sa.Column("last_auth_error_at", sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:

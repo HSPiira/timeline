@@ -8,7 +8,7 @@ Following Dependency Inversion Principle (DIP).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from src.infrastructure.persistence.models.event import Event
@@ -20,11 +20,11 @@ class IHashService(Protocol):
 
     def compute_hash(
         self,
-        tenant_id: str,
         subject_id: str,
         event_type: str,
+        schema_version: int,
         event_time: datetime,
-        payload: dict,
+        payload: dict[str, Any],
         previous_hash: str | None,
     ) -> str:
         """Compute hash for event data"""

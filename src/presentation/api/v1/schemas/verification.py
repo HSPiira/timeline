@@ -1,4 +1,5 @@
 """Pydantic schemas for chain verification responses"""
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -24,9 +25,7 @@ class EventVerificationResult(BaseModel):
 class ChainVerificationResponse(BaseModel):
     """Chain verification response for subject or tenant"""
 
-    subject_id: str | None = Field(
-        None, description="Subject ID (null for tenant-wide)"
-    )
+    subject_id: str | None = Field(None, description="Subject ID (null for tenant-wide)")
     tenant_id: str
     total_events: int
     valid_events: int

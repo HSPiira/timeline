@@ -1,4 +1,5 @@
 """Redis-based caching service for performance optimization"""
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,7 @@ class CacheService:
     Expected performance improvement: 90% reduction in repeated queries
     """
 
-    def __init__(self, redis_client: redis.Redis | None = None):
+    def __init__(self, redis_client: redis.Redis | None = None) -> None:
         """
         Initialize cache service
 
@@ -37,7 +38,7 @@ class CacheService:
         self.settings = get_settings()
         self._connected = False
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Establish Redis connection (call on app startup)"""
         if self.redis is None:
             try:
@@ -45,9 +46,7 @@ class CacheService:
                     host=self.settings.redis_host,
                     port=self.settings.redis_port,
                     db=self.settings.redis_db,
-                    password=self.settings.redis_password
-                    if self.settings.redis_password
-                    else None,
+                    password=self.settings.redis_password or None,
                     decode_responses=True,
                     socket_connect_timeout=5,
                     socket_keepalive=True,
@@ -56,16 +55,19 @@ class CacheService:
                 await self.redis.ping()
                 self._connected = True
                 logger.info(
-                    f"Redis cache connected: {self.settings.redis_host}:{self.settings.redis_port}"
+                    "Redis cache connected: %s:%s",
+                    self.settings.redis_host,
+                    self.settings.redis_port
                 )
             except (redis.ConnectionError, redis.TimeoutError) as e:
                 logger.warning(
-                    f"Redis connection failed: {e}. Cache disabled - falling back to database queries."
+                    "Redis connection failed: %s. Cache disabled - falling back to database queries.",
+                    e  
                 )
                 self._connected = False
                 self.redis = None
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Close Redis connection (call on app shutdown)"""
         if self.redis:
             await self.redis.close()
@@ -89,7 +91,7 @@ class CacheService:
         if not self.is_available() or self.redis is None:
             return None
 
-        redis_client = self.redis  # Local variable for type narrowing
+        redis_client = self.redis
         try:
             value = await redis_client.get(key)
             if value:
@@ -116,7 +118,7 @@ class CacheService:
         if not self.is_available() or self.redis is None:
             return False
 
-        redis_client = self.redis  # Local variable for type narrowing
+        redis_client = self.redis
         try:
             serialized = json.dumps(value)
             await redis_client.setex(key, ttl, serialized)
@@ -139,7 +141,7 @@ class CacheService:
         if not self.is_available() or self.redis is None:
             return False
 
-        redis_client = self.redis  # Local variable for type narrowing
+        redis_client = self.redis
         try:
             await redis_client.delete(key)
             logger.debug(f"Cache DELETE: {key}")
@@ -161,7 +163,7 @@ class CacheService:
         if not self.is_available() or self.redis is None:
             return 0
 
-        redis_client = self.redis  # Local variable for type narrowing
+        redis_client = self.redis
         try:
             # Scan for matching keys (cursor-based for large datasets)
             deleted = 0
@@ -186,7 +188,7 @@ class CacheService:
         if not self.is_available() or self.redis is None:
             return False
 
-        redis_client = self.redis  # Local variable for type narrowing
+        redis_client = self.redis
         try:
             await redis_client.flushdb()
             logger.warning("Cache CLEARED: All keys deleted")
@@ -196,7 +198,9 @@ class CacheService:
             return False
 
 
-def cached(key_prefix: str, ttl: int = 300, key_builder: Callable | None = None):
+def cached(
+    key_prefix: str, ttl: int = 300, key_builder: Callable[..., str] | None = None
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator for caching async function results
 
@@ -213,9 +217,9 @@ def cached(key_prefix: str, ttl: int = 300, key_builder: Callable | None = None)
             return await fetch_from_db(user_id, tenant_id)
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Extract cache service (assume first arg or 'cache' kwarg)
             cache: CacheService | None = None
 
@@ -240,9 +244,7 @@ def cached(key_prefix: str, ttl: int = 300, key_builder: Callable | None = None)
             else:
                 # Default: combine prefix with all args/kwargs
                 key_parts = [str(arg) for arg in func_args]
-                key_parts.extend(
-                    f"{k}={v}" for k, v in sorted(kwargs.items()) if k != "cache"
-                )
+                key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()) if k != "cache")
                 cache_key = f"{key_prefix}:{':'.join(key_parts)}"
 
             # Try to get from cache

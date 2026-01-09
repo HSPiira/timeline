@@ -1,4 +1,5 @@
 """Envelope encryption for OAuth credentials using KMS-like pattern"""
+
 from __future__ import annotations
 
 import base64
@@ -6,12 +7,13 @@ import hashlib
 import hmac
 import json
 import secrets
-from datetime import UTC, datetime
+from typing import Any, cast
 
 from cryptography.fernet import Fernet
 
 from src.infrastructure.config.settings import get_settings
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 
@@ -68,15 +70,13 @@ class EnvelopeEncryptor:
 
     def _generate_key_id(self) -> str:
         """Generate unique key identifier"""
-        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+        timestamp = utc_now().strftime("%Y%m%d%H%M%S")
         random_part = secrets.token_hex(8)
         return f"dek_{timestamp}_{random_part}"
 
     def _sign_payload(self, payload: str) -> str:
         """Generate HMAC signature of payload"""
-        signature = hmac.new(
-            self._master_key, payload.encode(), hashlib.sha256
-        ).hexdigest()
+        signature = hmac.new(self._master_key, payload.encode(), hashlib.sha256).hexdigest()
         return signature
 
     def _verify_signature(self, payload: str, signature: str) -> bool:
@@ -84,7 +84,7 @@ class EnvelopeEncryptor:
         expected = self._sign_payload(payload)
         return hmac.compare_digest(expected, signature)
 
-    def encrypt(self, data: str | dict) -> str:
+    def encrypt(self, data: str | dict[str, Any]) -> str:
         """
         Encrypt data using envelope encryption.
 
@@ -132,7 +132,7 @@ class EnvelopeEncryptor:
             logger.error(f"Encryption failed: {e}", exc_info=True)
             raise ValueError(f"Encryption failed: {e}") from e
 
-    def decrypt(self, encrypted_envelope: str) -> str | dict:
+    def decrypt(self, encrypted_envelope: str) -> str | dict[str, Any]:
         """
         Decrypt data from envelope.
 
@@ -174,7 +174,7 @@ class EnvelopeEncryptor:
             try:
                 result = json.loads(data_str)
                 if isinstance(result, dict):
-                    return result
+                    return cast(dict[str, Any], result)
                 return data_str
             except json.JSONDecodeError:
                 return data_str
@@ -233,9 +233,7 @@ class OAuthStateManager:
         Returns:
             Signed state: {state_id}:{signature}
         """
-        signature = hmac.new(
-            self._signing_key, state_id.encode(), hashlib.sha256
-        ).hexdigest()
+        signature = hmac.new(self._signing_key, state_id.encode(), hashlib.sha256).hexdigest()
         return f"{state_id}:{signature}"
 
     def verify_and_extract(self, signed_state: str) -> str:
@@ -258,9 +256,7 @@ class OAuthStateManager:
         state_id, signature = parts
 
         # Verify signature
-        expected = hmac.new(
-            self._signing_key, state_id.encode(), hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(self._signing_key, state_id.encode(), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(expected, signature):
             raise ValueError("Invalid state signature - possible CSRF attack")

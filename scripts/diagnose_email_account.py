@@ -6,6 +6,7 @@ This script helps identify why tokens are failing and provides actionable fixes.
 """
 
 import asyncio
+from datetime import UTC
 import os
 import sys
 
@@ -132,7 +133,7 @@ async def diagnose_account(account_id: str):
                         "client_secret": credentials_dict["client_secret"],
                     }
                     account.credentials_encrypted = encryptor.encrypt(updated_creds)
-                    account.token_last_refreshed_at = datetime.utcnow()
+                    account.token_last_refreshed_at = datetime.now(UTC)
                     account.token_refresh_count = (account.token_refresh_count or 0) + 1
                     account.last_auth_error = None
                     account.last_auth_error_at = None

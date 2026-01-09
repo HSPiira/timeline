@@ -1,10 +1,14 @@
 """Test event repository"""
+
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
-from src.infrastructure.persistence.repositories.event_repo import EventRepository
+
 from src.infrastructure.persistence.models.event import Event
 from src.infrastructure.persistence.models.subject import Subject
 from src.infrastructure.persistence.models.tenant import Tenant
+from src.infrastructure.persistence.repositories.event_repo import \
+    EventRepository
 
 
 @pytest.fixture
@@ -17,11 +21,7 @@ async def event_repo(test_db):
 async def second_tenant(test_db):
     """Create second tenant for isolation tests"""
     tenant = Tenant(
-        id="tenant-2",
-        code="TENANT2",
-        name="Second Tenant",
-        status="active",
-        is_active=True
+        id="tenant-2", code="TENANT2", name="Second Tenant", status="active", is_active=True
     )
     test_db.add(tenant)
     await test_db.commit()
@@ -33,10 +33,7 @@ async def second_tenant(test_db):
 async def second_subject(test_db, second_tenant):
     """Create subject for second tenant"""
     subject = Subject(
-        id="subject-2",
-        tenant_id=second_tenant.id,
-        subject_type="user",
-        external_ref="user-456"
+        id="subject-2", tenant_id=second_tenant.id, subject_type="user", external_ref="user-456"
     )
     test_db.add(subject)
     await test_db.commit()
@@ -55,7 +52,7 @@ async def test_get_last_event_returns_most_recent(event_repo, test_db, test_subj
         schema_version=1,
         event_time=datetime.now(timezone.utc) - timedelta(hours=2),
         payload={"step": 1},
-        hash="hash1"
+        hash="hash1",
     )
     event2 = Event(
         tenant_id=test_tenant.id,
@@ -65,7 +62,7 @@ async def test_get_last_event_returns_most_recent(event_repo, test_db, test_subj
         event_time=datetime.now(timezone.utc) - timedelta(hours=1),
         payload={"step": 2},
         hash="hash2",
-        previous_hash="hash1"
+        previous_hash="hash1",
     )
     event3 = Event(
         tenant_id=test_tenant.id,
@@ -75,7 +72,7 @@ async def test_get_last_event_returns_most_recent(event_repo, test_db, test_subj
         event_time=datetime.now(timezone.utc),
         payload={"step": 3},
         hash="hash3",
-        previous_hash="hash2"
+        previous_hash="hash2",
     )
 
     test_db.add_all([event1, event2, event3])
@@ -110,7 +107,7 @@ async def test_tenant_isolation_in_get_last_event(
         schema_version=1,
         event_time=datetime.now(timezone.utc),
         payload={"tenant": 1},
-        hash="hash1"
+        hash="hash1",
     )
 
     # Create event for tenant 2
@@ -121,7 +118,7 @@ async def test_tenant_isolation_in_get_last_event(
         schema_version=1,
         event_time=datetime.now(timezone.utc),
         payload={"tenant": 2},
-        hash="hash2"
+        hash="hash2",
     )
 
     test_db.add_all([event1, event2])
@@ -152,7 +149,7 @@ async def test_get_by_subject_returns_ordered_events(
             schema_version=1,
             event_time=event_time,
             payload={"order": i},
-            hash=f"hash{i}"
+            hash=f"hash{i}",
         )
         test_db.add(event)
 
@@ -180,7 +177,7 @@ async def test_get_by_subject_pagination(event_repo, test_db, test_subject, test
             schema_version=1,
             event_time=datetime.now(timezone.utc) + timedelta(seconds=i),
             payload={"index": i},
-            hash=f"hash{i}"
+            hash=f"hash{i}",
         )
         test_db.add(event)
 
@@ -211,7 +208,7 @@ async def test_get_last_hash_returns_previous_hash(event_repo, test_db, test_sub
         schema_version=1,
         event_time=datetime.now(timezone.utc) - timedelta(hours=1),
         payload={},
-        hash="hash1"
+        hash="hash1",
     )
     event2 = Event(
         tenant_id=test_tenant.id,
@@ -221,7 +218,7 @@ async def test_get_last_hash_returns_previous_hash(event_repo, test_db, test_sub
         event_time=datetime.now(timezone.utc),
         payload={},
         hash="hash2",
-        previous_hash="hash1"
+        previous_hash="hash1",
     )
 
     test_db.add_all([event1, event2])
@@ -251,7 +248,7 @@ async def test_get_by_id_and_tenant(event_repo, test_db, test_subject, test_tena
         schema_version=1,
         event_time=datetime.now(timezone.utc),
         payload={},
-        hash="hash1"
+        hash="hash1",
     )
     test_db.add(event)
     await test_db.commit()
@@ -277,7 +274,7 @@ async def test_event_immutability_enforcement(test_db, test_subject, test_tenant
         schema_version=1,
         event_time=datetime.now(timezone.utc),
         payload={"original": "value"},
-        hash="hash1"
+        hash="hash1",
     )
     test_db.add(event)
     await test_db.commit()

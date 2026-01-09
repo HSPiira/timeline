@@ -1,4 +1,5 @@
 """Input sanitization utilities."""
+
 import html
 import re
 from typing import Any

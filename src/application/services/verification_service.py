@@ -13,10 +13,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from src.application.services.hash_service import HashService
+from src.shared.utils import utc_now
 
 if TYPE_CHECKING:
     from src.infrastructure.persistence.models.event import Event
-    from src.infrastructure.persistence.repositories.event_repo import EventRepository
+    from src.infrastructure.persistence.repositories.event_repo import \
+        EventRepository
 
 
 class VerificationResult:
@@ -33,6 +35,7 @@ class VerificationResult:
         error_message: str | None = None,
         expected_hash: str | None = None,
         actual_hash: str | None = None,
+        previous_hash: str | None = None,
     ):
         self.event_id = event_id
         self.event_type = event_type
@@ -43,6 +46,7 @@ class VerificationResult:
         self.error_message = error_message
         self.expected_hash = expected_hash
         self.actual_hash = actual_hash
+        self.previous_hash = previous_hash
 
 
 class ChainVerificationResult:
@@ -109,11 +113,11 @@ class VerificationService:
                 valid_events=0,
                 invalid_events=0,
                 is_chain_valid=True,  # Empty chain is valid
-                verified_at=datetime.utcnow(),
+                verified_at=utc_now(),
                 event_results=[],
             )
 
-        event_results = []
+        event_results: list[VerificationResult] = []
         valid_count = 0
         invalid_count = 0
 
@@ -133,7 +137,7 @@ class VerificationService:
             valid_events=valid_count,
             invalid_events=invalid_count,
             is_chain_valid=(invalid_count == 0),
-            verified_at=datetime.utcnow(),
+            verified_at=utc_now(),
             event_results=event_results,
         )
 
@@ -161,12 +165,12 @@ class VerificationService:
                 valid_events=0,
                 invalid_events=0,
                 is_chain_valid=True,
-                verified_at=datetime.utcnow(),
+                verified_at=utc_now(),
                 event_results=[],
             )
 
         # Group events by subject for proper chain verification
-        events_by_subject: dict[str, list[Event]] = {}
+        events_by_subject: dict[str, list["Event"]] = {}
         for event in events:
             if event.subject_id not in events_by_subject:
                 events_by_subject[event.subject_id] = []
@@ -178,16 +182,14 @@ class VerificationService:
                 events_by_subject[subject_id], key=lambda e: e.event_time
             )
 
-        all_results = []
+        all_results: list[VerificationResult] = []
         valid_count = 0
         invalid_count = 0
 
         # Verify each subject's chain
         for _, subject_events in events_by_subject.items():
             for i, event in enumerate(subject_events):
-                result = self._verify_event(
-                    event, subject_events[i - 1] if i > 0 else None, i
-                )
+                result = self._verify_event(event, subject_events[i - 1] if i > 0 else None, i)
                 all_results.append(result)
 
                 if result.is_valid:
@@ -202,7 +204,7 @@ class VerificationService:
             valid_events=valid_count,
             invalid_events=invalid_count,
             is_chain_valid=(invalid_count == 0),
-            verified_at=datetime.utcnow(),
+            verified_at=utc_now(),
             event_results=all_results,
         )
 
@@ -225,11 +227,11 @@ class VerificationService:
         Returns:
             VerificationResult with validation details
         """
-        # Recompute hash
+        # Recompute hash using the same method as event creation
         computed_hash = self.hash_service.compute_hash(
-            tenant_id=event.tenant_id,
             subject_id=event.subject_id,
             event_type=event.event_type,
+            schema_version=event.schema_version,
             event_time=event.event_time,
             payload=event.payload,
             previous_hash=event.previous_hash,
@@ -247,6 +249,7 @@ class VerificationService:
                 error_message="Event hash does not match recomputed hash",
                 expected_hash=computed_hash,
                 actual_hash=event.hash,
+                previous_hash=event.previous_hash,
             )
 
         # Check 2: Chain linkage
@@ -260,9 +263,13 @@ class VerificationService:
                     sequence=sequence,
                     is_valid=False,
                     error_type="GENESIS_ERROR",
-                    error_message=f"Genesis event should have null previous_hash, got: {event.previous_hash}",
+                    error_message=(
+                        f"Genesis event should have null previous_hash, got: "
+                        f"{event.previous_hash}"
+                    ),
                     expected_hash=None,
                     actual_hash=event.previous_hash,
+                    previous_hash=event.previous_hash,
                 )
         else:
             # Non-genesis event - previous_hash must match previous event's hash
@@ -277,6 +284,7 @@ class VerificationService:
                     error_message=f"Previous event not found for sequence {sequence}",
                     expected_hash="<previous_event>",
                     actual_hash=None,
+                    previous_hash=event.previous_hash,
                 )
 
             if event.previous_hash != previous_event.hash:
@@ -287,9 +295,13 @@ class VerificationService:
                     sequence=sequence,
                     is_valid=False,
                     error_type="CHAIN_BREAK",
-                    error_message="Chain broken: previous_hash does not match previous event's hash",
+                    error_message=(
+                        "Chain broken: previous_hash "
+                        "does not match previous event's hash"
+                    ),
                     expected_hash=previous_event.hash,
                     actual_hash=event.previous_hash,
+                    previous_hash=event.previous_hash,
                 )
 
         # All checks passed
@@ -303,4 +315,5 @@ class VerificationService:
             error_message=None,
             expected_hash=event.hash,
             actual_hash=event.hash,
+            previous_hash=event.previous_hash,
         )

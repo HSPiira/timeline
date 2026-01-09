@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from src.domain.value_objects.core import EventChain, EventType, SubjectId, TenantId
+from src.domain.value_objects.core import EventChain, EventType
+from src.shared.utils import utc_now
 
 
 @dataclass
@@ -22,23 +23,20 @@ class EventEntity:
     """
 
     id: str
-    tenant_id: TenantId
-    subject_id: SubjectId
+    tenant_id: str
+    subject_id: str
     event_type: EventType
     event_time: datetime
     payload: dict[str, Any]
     chain: EventChain
-    created_at: datetime
 
     def validate(self) -> bool:
         """Validate event business rules"""
         # Event time should not be in the future
 
-        now = datetime.now(UTC)
+        now = utc_now()
         event_time = (
-            self.event_time
-            if self.event_time.tzinfo
-            else self.event_time.replace(tzinfo=UTC)
+            self.event_time if self.event_time.tzinfo else self.event_time.replace(tzinfo=UTC)
         )
         if event_time > now:
             raise ValueError("Event time cannot be in the future")

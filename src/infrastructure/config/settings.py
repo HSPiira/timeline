@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Storage
     storage_backend: str = "local"  # Options: "local", "s3"
     storage_root: str = "/var/timeline/storage"  # For local backend
+    storage_base_url: str | None = None  # Base URL for download links (e.g., "https://api.example.com")
     s3_bucket: str | None = None  # Required for S3 backend
     s3_region: str = "us-east-1"
     s3_endpoint_url: str | None = None  # For MinIO/LocalStack
@@ -65,17 +66,11 @@ class Settings(BaseSettings):
         """Validate storage backend and required configuration"""
         # Validate required fields are loaded from environment
         if not self.database_url:
-            raise ValueError(
-                "DATABASE_URL is required. Set in environment or .env file."
-            )
+            raise ValueError("DATABASE_URL is required. Set in environment or .env file.")
         if not self.secret_key:
-            raise ValueError(
-                "SECRET_KEY is required. Generate with: openssl rand -hex 32"
-            )
+            raise ValueError("SECRET_KEY is required. Generate with: openssl rand -hex 32")
         if not self.encryption_salt:
-            raise ValueError(
-                "ENCRYPTION_SALT is required. Generate with: openssl rand -hex 16"
-            )
+            raise ValueError("ENCRYPTION_SALT is required. Generate with: openssl rand -hex 16")
 
         # Validate storage backend
         if self.storage_backend == "s3":

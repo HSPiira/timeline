@@ -1,26 +1,22 @@
 """Workflow API endpoints"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.presentation.api.dependencies import (
-    get_current_tenant,
-    get_current_user,
-    get_db,
-    get_db_transactional,
-    require_permission,
-)
 from src.infrastructure.persistence.models.tenant import Tenant
 from src.infrastructure.persistence.models.workflow import Workflow
-from src.infrastructure.persistence.repositories.workflow_repo import WorkflowExecutionRepository, WorkflowRepository
+from src.infrastructure.persistence.repositories.workflow_repo import (
+    WorkflowExecutionRepository, WorkflowRepository)
+from src.presentation.api.dependencies import (get_current_tenant,
+                                               get_current_user, get_db,
+                                               get_db_transactional,
+                                               require_permission)
 from src.presentation.api.v1.schemas.token import TokenPayload
 from src.presentation.api.v1.schemas.workflow import (
-    WorkflowCreate,
-    WorkflowExecutionResponse,
-    WorkflowResponse,
-    WorkflowUpdate,
-)
+    WorkflowCreate, WorkflowExecutionResponse, WorkflowResponse,
+    WorkflowUpdate)
 
 router = APIRouter()
 
@@ -97,9 +93,7 @@ async def get_workflow(
     workflow = await repo.get_by_id(workflow_id, tenant.id)
 
     if not workflow:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
 
     return WorkflowResponse.model_validate(workflow)
 
@@ -120,9 +114,7 @@ async def update_workflow(
     workflow = await repo.get_by_id(workflow_id, tenant.id)
 
     if not workflow:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
 
     # Update fields
     update_data = data.model_dump(exclude_unset=True)
@@ -148,9 +140,7 @@ async def delete_workflow(
     deleted = await repo.soft_delete(workflow_id, tenant.id)
 
     if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
 
 
 @router.get(
@@ -171,9 +161,7 @@ async def get_workflow_executions(
     workflow = await workflow_repo.get_by_id(workflow_id, tenant.id)
 
     if not workflow:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
 
     # Get executions
     exec_repo = WorkflowExecutionRepository(db)
@@ -199,8 +187,6 @@ async def get_execution(
     execution = await repo.get_by_id(execution_id, tenant.id)
 
     if not execution:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found")
 
     return WorkflowExecutionResponse.model_validate(execution)

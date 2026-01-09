@@ -1,15 +1,16 @@
 """Unit tests for LocalStorageService"""
+
 import io
-import tempfile
-import pytest
 from pathlib import Path
-from src.infrastructure.external.storage.local_storage import LocalStorageService
-from src.infrastructure.exceptions import (
-    StorageNotFoundError,
-    StorageChecksumMismatchError,
-    StoragePermissionError,
-    StorageAlreadyExistsError
-)
+
+import pytest
+
+from src.infrastructure.exceptions import (StorageAlreadyExistsError,
+                                           StorageChecksumMismatchError,
+                                           StorageNotFoundError,
+                                           StoragePermissionError)
+from src.infrastructure.external.storage.local_storage import \
+    LocalStorageService
 
 
 @pytest.fixture
@@ -63,7 +64,7 @@ class TestLocalStorageUpload:
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
             content_type=content_type,
-            metadata={"custom_key": "custom_value"}
+            metadata={"custom_key": "custom_value"},
         )
 
         # THEN
@@ -93,7 +94,7 @@ class TestLocalStorageUpload:
                 file_data=sample_file_data,
                 storage_ref=storage_ref,
                 expected_checksum=wrong_checksum,
-                content_type="text/plain"
+                content_type="text/plain",
             )
 
         assert "Checksum mismatch" in str(exc_info.value)
@@ -113,7 +114,7 @@ class TestLocalStorageUpload:
             file_data=sample_file_data,
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
-            content_type="text/plain"
+            content_type="text/plain",
         )
 
         # WHEN - Upload same file again
@@ -122,7 +123,7 @@ class TestLocalStorageUpload:
             file_data=sample_file_data,
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
-            content_type="text/plain"
+            content_type="text/plain",
         )
 
         # THEN - Should return same metadata (idempotent)
@@ -144,7 +145,7 @@ class TestLocalStorageUpload:
             file_data=sample_file_data,
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
-            content_type="text/plain"
+            content_type="text/plain",
         )
 
         # WHEN - Try to upload different content to same path
@@ -157,7 +158,7 @@ class TestLocalStorageUpload:
                 file_data=different_content,
                 storage_ref=storage_ref,
                 expected_checksum=different_checksum,
-                content_type="text/plain"
+                content_type="text/plain",
             )
 
 
@@ -176,7 +177,7 @@ class TestLocalStoragePathSecurity:
             "../../../etc/passwd",
             "tenants/../../etc/passwd",
             "tenants/acme/../../../etc/passwd",
-            "tenants/acme/documents/../../../../../etc/passwd"
+            "tenants/acme/documents/../../../../../etc/passwd",
         ]
 
         # WHEN/THEN
@@ -186,7 +187,7 @@ class TestLocalStoragePathSecurity:
                     file_data=sample_file_data,
                     storage_ref=malicious_ref,
                     expected_checksum="dummy",
-                    content_type="text/plain"
+                    content_type="text/plain",
                 )
             assert "Path traversal detected" in str(exc_info.value)
             sample_file_data.seek(0)  # Reset for next iteration
@@ -200,12 +201,9 @@ class TestLocalStoragePathSecurity:
         # GIVEN
         valid_refs = [
             "tenants/acme/documents/doc_1/v1/file.txt",
-            "tenants/acme/documents/doc_2/v2/file.pdf"
+            "tenants/acme/documents/doc_2/v2/file.pdf",
         ]
-        invalid_refs = [
-            "../../../etc/passwd",
-            "tenants/../../secret.txt"
-        ]
+        invalid_refs = ["../../../etc/passwd", "tenants/../../secret.txt"]
 
         # WHEN/THEN - Valid paths should succeed
         for ref in valid_refs:
@@ -234,7 +232,7 @@ class TestLocalStorageDownload:
             file_data=sample_file_data,
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
-            content_type="text/plain"
+            content_type="text/plain",
         )
 
         # WHEN - Download file
@@ -285,7 +283,7 @@ class TestLocalStorageMetadata:
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
             content_type="text/plain",
-            metadata=custom_metadata
+            metadata=custom_metadata,
         )
 
         # WHEN - Get metadata
@@ -311,7 +309,7 @@ class TestLocalStorageMetadata:
             file_data=sample_file_data,
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
-            content_type="text/plain"
+            content_type="text/plain",
         )
 
         # WHEN/THEN
@@ -347,7 +345,7 @@ class TestLocalStorageDelete:
             file_data=sample_file_data,
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
-            content_type="text/plain"
+            content_type="text/plain",
         )
 
         # WHEN - Delete file
@@ -388,7 +386,7 @@ class TestLocalStorageDelete:
             file_data=sample_file_data,
             storage_ref=storage_ref,
             expected_checksum=sample_checksum,
-            content_type="text/plain"
+            content_type="text/plain",
         )
 
         # WHEN - Delete file
@@ -416,7 +414,8 @@ class TestLocalStoragePresignedURLs:
         storage_ref = "tenants/acme/documents/doc_123/v1/test.txt"
 
         # WHEN/THEN
-        from core.exceptions import StorageNotSupportedError
+        from src.infrastructure.exceptions import StorageNotSupportedError
+
         with pytest.raises(StorageNotSupportedError) as exc_info:
             await storage_service.generate_download_url(storage_ref)
 
@@ -438,7 +437,6 @@ class TestLocalStorageAtomicWrites:
         # GIVEN
         storage_ref = "tenants/acme/documents/doc_123/v1/test.txt"
         wrong_checksum = "0" * 64
-        storage_root = Path(temp_storage_root)
 
         # WHEN - Upload will fail due to checksum mismatch
         try:
@@ -446,7 +444,7 @@ class TestLocalStorageAtomicWrites:
                 file_data=sample_file_data,
                 storage_ref=storage_ref,
                 expected_checksum=wrong_checksum,
-                content_type="text/plain"
+                content_type="text/plain",
             )
         except StorageChecksumMismatchError:
             pass

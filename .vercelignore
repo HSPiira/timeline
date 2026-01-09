@@ -1,0 +1,73 @@
+# Virtual environments
+.venv
+.venv/**
+venv
+env
+
+# Python cache
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Testing
+.pytest_cache
+.pytest_cache/**
+tests
+tests/**
+.coverage
+htmlcov
+.tox
+
+# Linting and type checking
+.mypy_cache
+.mypy_cache/**
+.ruff_cache
+.ruff_cache/**
+.pylint.d
+
+# IDE
+.vscode
+.vscode/**
+.idea
+*.swp
+*.swo
+*~
+
+# Git
+.git
+.git/**
+.gitignore
+.gitattributes
+
+# Documentation
+docs
+docs/**
+*.md
+README.md
+CHANGELOG.md
+
+# Scripts and tools
+scripts
+scripts/**
+summaries
+summaries/**
+
+# Local storage
+storage
+storage/**
+
+# Development files
+.env.example
+.python-version
+alembic.ini
+pytest.ini
+requirements-dev.txt
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

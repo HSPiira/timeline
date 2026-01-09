@@ -5,12 +5,13 @@ Revises: 086f991ff6d7
 Create Date: 2025-12-28 15:30:12.343396
 
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
+from typing import Union
 
 import sqlalchemy as sa
-from sqlalchemy import inspect
-
 from alembic import op
+from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision: str = "063b9eee42d4"
@@ -111,24 +112,16 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["provider_config_id"], ["oauth_provider_config.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        op.f("ix_oauth_state_consumed"), "oauth_state", ["consumed"], unique=False
-    )
-    op.create_index(
-        op.f("ix_oauth_state_expires_at"), "oauth_state", ["expires_at"], unique=False
-    )
+    op.create_index(op.f("ix_oauth_state_consumed"), "oauth_state", ["consumed"], unique=False)
+    op.create_index(op.f("ix_oauth_state_expires_at"), "oauth_state", ["expires_at"], unique=False)
     op.create_index(
         op.f("ix_oauth_state_provider_config_id"),
         "oauth_state",
         ["provider_config_id"],
         unique=False,
     )
-    op.create_index(
-        op.f("ix_oauth_state_tenant_id"), "oauth_state", ["tenant_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_oauth_state_user_id"), "oauth_state", ["user_id"], unique=False
-    )
+    op.create_index(op.f("ix_oauth_state_tenant_id"), "oauth_state", ["tenant_id"], unique=False)
+    op.create_index(op.f("ix_oauth_state_user_id"), "oauth_state", ["user_id"], unique=False)
 
     # Create oauth_audit_log table
     op.create_table(
@@ -188,22 +181,16 @@ def upgrade() -> None:
             sa.Column("oauth_provider_config_version", sa.Integer(), nullable=True),
         )
     if "granted_scopes" not in columns:
-        op.add_column(
-            "email_account", sa.Column("granted_scopes", sa.JSON(), nullable=True)
-        )
+        op.add_column("email_account", sa.Column("granted_scopes", sa.JSON(), nullable=True))
     if "oauth_status" not in columns:
         op.add_column(
             "email_account",
-            sa.Column(
-                "oauth_status", sa.String(), nullable=False, server_default="active"
-            ),
+            sa.Column("oauth_status", sa.String(), nullable=False, server_default="active"),
         )
     if "oauth_error_count" not in columns:
         op.add_column(
             "email_account",
-            sa.Column(
-                "oauth_error_count", sa.Integer(), nullable=False, server_default="0"
-            ),
+            sa.Column("oauth_error_count", sa.Integer(), nullable=False, server_default="0"),
         )
     if "oauth_next_retry_at" not in columns:
         op.add_column(
@@ -218,9 +205,7 @@ def upgrade() -> None:
     if "token_refresh_count" not in columns:
         op.add_column(
             "email_account",
-            sa.Column(
-                "token_refresh_count", sa.Integer(), nullable=False, server_default="0"
-            ),
+            sa.Column("token_refresh_count", sa.Integer(), nullable=False, server_default="0"),
         )
     if "token_refresh_failures" not in columns:
         op.add_column(
@@ -233,9 +218,7 @@ def upgrade() -> None:
             ),
         )
     if "last_auth_error" not in columns:
-        op.add_column(
-            "email_account", sa.Column("last_auth_error", sa.String(), nullable=True)
-        )
+        op.add_column("email_account", sa.Column("last_auth_error", sa.String(), nullable=True))
     if "last_auth_error_at" not in columns:
         op.add_column(
             "email_account",
@@ -267,9 +250,7 @@ def downgrade() -> None:
     """Downgrade schema."""
     # Remove indexes from email_account
     op.drop_index(op.f("ix_email_account_oauth_status"), table_name="email_account")
-    op.drop_index(
-        op.f("ix_email_account_oauth_provider_config_id"), table_name="email_account"
-    )
+    op.drop_index(op.f("ix_email_account_oauth_provider_config_id"), table_name="email_account")
 
     # Remove OAuth tracking columns from email_account
     op.drop_column("email_account", "last_auth_error_at")
@@ -287,12 +268,8 @@ def downgrade() -> None:
     # Drop oauth_audit_log table
     op.drop_index(op.f("ix_oauth_audit_log_timestamp"), table_name="oauth_audit_log")
     op.drop_index(op.f("ix_oauth_audit_log_tenant_id"), table_name="oauth_audit_log")
-    op.drop_index(
-        op.f("ix_oauth_audit_log_provider_config_id"), table_name="oauth_audit_log"
-    )
-    op.drop_index(
-        op.f("ix_oauth_audit_log_actor_user_id"), table_name="oauth_audit_log"
-    )
+    op.drop_index(op.f("ix_oauth_audit_log_provider_config_id"), table_name="oauth_audit_log")
+    op.drop_index(op.f("ix_oauth_audit_log_actor_user_id"), table_name="oauth_audit_log")
     op.drop_table("oauth_audit_log")
 
     # Drop oauth_state table
@@ -304,9 +281,7 @@ def downgrade() -> None:
     op.drop_table("oauth_state")
 
     # Drop oauth_provider_config table
-    op.drop_index(
-        op.f("ix_oauth_provider_config_tenant_id"), table_name="oauth_provider_config"
-    )
+    op.drop_index(op.f("ix_oauth_provider_config_tenant_id"), table_name="oauth_provider_config")
     op.drop_index(
         op.f("ix_oauth_provider_config_superseded_by_id"),
         table_name="oauth_provider_config",
@@ -315,14 +290,10 @@ def downgrade() -> None:
         op.f("ix_oauth_provider_config_provider_type"),
         table_name="oauth_provider_config",
     )
-    op.drop_index(
-        op.f("ix_oauth_provider_config_is_active"), table_name="oauth_provider_config"
-    )
+    op.drop_index(op.f("ix_oauth_provider_config_is_active"), table_name="oauth_provider_config")
     op.drop_index(
         op.f("ix_oauth_provider_config_health_status"),
         table_name="oauth_provider_config",
     )
-    op.drop_index(
-        op.f("ix_oauth_provider_config_deleted_at"), table_name="oauth_provider_config"
-    )
+    op.drop_index(op.f("ix_oauth_provider_config_deleted_at"), table_name="oauth_provider_config")
     op.drop_table("oauth_provider_config")

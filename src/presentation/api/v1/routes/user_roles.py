@@ -4,12 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.presentation.api.dependencies import get_current_tenant, get_current_user, require_permission
-from src.infrastructure.persistence.database import get_db, get_db_transactional
+from src.infrastructure.persistence.database import (get_db,
+                                                     get_db_transactional)
 from src.infrastructure.persistence.models.tenant import Tenant
-from src.infrastructure.persistence.repositories.permission_repo import PermissionRepository
-from src.infrastructure.persistence.repositories.role_repo import RoleRepository
-from src.infrastructure.persistence.repositories.user_repo import UserRepository
+from src.infrastructure.persistence.repositories.permission_repo import \
+    PermissionRepository
+from src.infrastructure.persistence.repositories.role_repo import \
+    RoleRepository
+from src.infrastructure.persistence.repositories.user_repo import \
+    UserRepository
+from src.presentation.api.dependencies import (get_current_tenant,
+                                               get_current_user,
+                                               require_permission)
 from src.presentation.api.v1.schemas.role import RoleResponse, UserRoleAssign
 from src.presentation.api.v1.schemas.token import TokenPayload
 
@@ -33,16 +39,12 @@ async def assign_role_to_user(
     # Verify user exists in tenant
     user = await user_repo.get_by_id_and_tenant(user_id, current_tenant.id)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     # Verify role exists and belongs to tenant
     role = await role_repo.get_by_id(data.role_id)
     if not role or role.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     if not role.is_active:
         raise HTTPException(
@@ -76,9 +78,7 @@ async def assign_role_to_user(
         ) from None
 
 
-@router.delete(
-    "/users/{user_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/users/{user_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_role_from_user(
     user_id: str,
     role_id: str,
@@ -95,16 +95,12 @@ async def remove_role_from_user(
     # Verify user exists in tenant
     user = await user_repo.get_by_id_and_tenant(user_id, current_tenant.id)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     # Verify role exists and belongs to tenant
     role = await role_repo.get_by_id(role_id)
     if not role or role.tenant_id != current_tenant.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     success = await perm_repo.remove_role_from_user(user_id, role_id)
     if not success:
@@ -141,9 +137,7 @@ async def get_user_roles(
     # Verify user exists in tenant (prevents user enumeration)
     user = await user_repo.get_by_id_and_tenant(user_id, current_tenant.id)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     roles = await perm_repo.get_user_roles(user_id, current_tenant.id)
     return [RoleResponse.model_validate(role) for role in roles]

@@ -1,8 +1,11 @@
 """Tests for Redis cache service"""
+
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from src.infrastructure.cache.redis_cache import CacheService
 import redis.asyncio as redis
+
+from src.infrastructure.cache.redis_cache import CacheService
 
 
 @pytest.fixture
@@ -66,6 +69,7 @@ async def test_cache_set_success(cache_service):
     assert call_args[0][1] == 300  # ttl
     # Third arg is JSON string - verify it deserializes correctly
     import json
+
     assert json.loads(call_args[0][2]) == data
 
 
@@ -83,9 +87,14 @@ async def test_cache_delete_success(cache_service):
 @pytest.mark.asyncio
 async def test_cache_delete_pattern(cache_service):
     """Test delete pattern (wildcard deletion)"""
+
     # Mock scan_iter to return matching keys
     async def mock_scan_iter(match=None):
-        keys = ["permissions:tenant-1:user-1", "permissions:tenant-1:user-2", "permissions:tenant-1:user-3"]
+        keys = [
+            "permissions:tenant-1:user-1",
+            "permissions:tenant-1:user-2",
+            "permissions:tenant-1:user-3",
+        ]
         for key in keys:
             yield key
 
@@ -138,7 +147,7 @@ async def test_cache_is_not_available(disconnected_cache):
 @pytest.mark.asyncio
 async def test_cache_connect_success():
     """Test successful cache connection"""
-    with patch('redis.asyncio.Redis') as mock_redis_class:
+    with patch("redis.asyncio.Redis") as mock_redis_class:
         mock_client = AsyncMock()
         mock_client.ping = AsyncMock()
         mock_redis_class.return_value = mock_client
@@ -153,7 +162,7 @@ async def test_cache_connect_success():
 @pytest.mark.asyncio
 async def test_cache_connect_failure():
     """Test cache connection failure"""
-    with patch('redis.asyncio.Redis') as mock_redis_class:
+    with patch("redis.asyncio.Redis") as mock_redis_class:
         mock_client = AsyncMock()
         mock_client.ping = AsyncMock(side_effect=redis.ConnectionError("Connection refused"))
         mock_redis_class.return_value = mock_client
@@ -208,11 +217,8 @@ async def test_cache_with_complex_data(cache_service):
     complex_data = {
         "tenant_id": "tenant-123",
         "permissions": ["event:create", "subject:read", "event:delete"],
-        "metadata": {
-            "roles": ["admin", "editor"],
-            "expires_at": None
-        },
-        "count": 42
+        "metadata": {"roles": ["admin", "editor"], "expires_at": None},
+        "count": 42,
     }
 
     # Set complex data
@@ -222,6 +228,7 @@ async def test_cache_with_complex_data(cache_service):
     # Verify it was serialized correctly
     call_args = cache_service.redis.setex.call_args[0]
     import json
+
     stored_data = json.loads(call_args[2])
     assert stored_data == complex_data
 

@@ -5,17 +5,17 @@ Workflows define triggers and actions:
 - Trigger: event_type to watch for
 - Actions: what to do when triggered (create event, notify, etc.)
 """
+
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (JSON, Boolean, DateTime, ForeignKey, Integer, String,
+                        Text)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.persistence.database import Base
 from src.infrastructure.persistence.models.mixins import (
-    AuditedMultiTenantModel,
-    MultiTenantModel,
-)
+    AuditedMultiTenantModel, MultiTenantModel)
 
 
 class Workflow(AuditedMultiTenantModel, Base):
@@ -136,12 +136,8 @@ class WorkflowExecution(MultiTenantModel, Base):
         default="pending",
         comment="pending | running | completed | failed",
     )
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Execution results
     actions_executed: Mapped[int] = mapped_column(
@@ -159,4 +155,8 @@ class WorkflowExecution(MultiTenantModel, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def __repr__(self):
-        return f"<WorkflowExecution(id={self.id}, workflow_id={self.workflow_id}, status={self.status})>"
+        return (
+            f"<WorkflowExecution(id={self.id}, "
+            f"workflow_id={self.workflow_id}, "
+            f"status={self.status})>"
+        )

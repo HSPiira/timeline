@@ -15,10 +15,10 @@ from src.shared.utils.generators import generate_cuid
 if TYPE_CHECKING:
     from src.application.interfaces.storage import IStorageService
     from src.infrastructure.persistence.models.document import Document
-    from src.infrastructure.persistence.repositories.document_repo import (
-        DocumentRepository,
-    )
-    from src.infrastructure.persistence.repositories.tenant_repo import TenantRepository
+    from src.infrastructure.persistence.repositories.document_repo import \
+        DocumentRepository
+    from src.infrastructure.persistence.repositories.tenant_repo import \
+        TenantRepository
 
 
 class DocumentService:
@@ -165,9 +165,7 @@ class DocumentService:
 
         # Generate document ID and storage_ref
         document_id = generate_cuid()
-        storage_ref = self._generate_storage_ref(
-            tenant.code, document_id, version, filename
-        )
+        storage_ref = self._generate_storage_ref(tenant.code, document_id, version, filename)
 
         # Get file size
         file_data.seek(0, 2)  # Seek to end
