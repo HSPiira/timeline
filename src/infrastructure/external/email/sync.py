@@ -111,7 +111,7 @@ class UniversalEmailSync:
             await provider.connect(config)
 
             since = email_account.last_sync_at if incremental else None
-            messages = await provider.fetch_messages(since=since, limit=100)
+            messages = await provider.fetch_messages(since=since, limit=500)
 
             logger.info("Fetched %s messages from %s", len(messages), email_account.provider_type)
 
@@ -167,19 +167,22 @@ class UniversalEmailSync:
         self, email_account: EmailAccount, messages: list[EmailMessage]
     ) -> tuple[int, datetime | None]:
         """
-        Transform email messages to Timeline events.
+        Transform email messages to Timeline events using bulk insert.
 
         This transformation is IDENTICAL for all providers (Gmail, Outlook, IMAP).
+
+        Performance optimizations:
+        - Batch duplicate check (1 query for all messages)
+        - Bulk event insert (1 query for all new events)
+        - In-memory filtering of duplicates
 
         Returns:
             Tuple of (events_created, last_processed_timestamp)
         """
-        events_created = 0
-        last_successfully_processed_timestamp = None
+        if not messages:
+            return 0, None
 
         # PERFORMANCE FIX: Batch check for existing events to avoid N+1 queries
-        # Before: N queries (one per message)
-        # After: 1 query for all messages
         message_ids = [msg.message_id for msg in messages]
         existing_message_ids = await self._check_existing_events_batch(
             email_account.subject_id, message_ids
@@ -189,65 +192,106 @@ class UniversalEmailSync:
         sorted_messages = sorted(messages, key=lambda msg: msg.timestamp)
         last_timestamp = latest_event_time
 
+        # Build list of events to create (filter duplicates, adjust timestamps)
+        events_to_create: list[EventCreate] = []
+        last_successfully_processed_timestamp: datetime | None = None
+
         for msg in sorted_messages:
-            try:
-                # IN-MEMORY CHECK: O(1) lookup instead of database query
-                if msg.message_id in existing_message_ids:
-                    logger.debug("Skipping message %s - event already exists", msg.message_id)
-                    last_successfully_processed_timestamp = msg.timestamp
-                    continue
+            # IN-MEMORY CHECK: O(1) lookup instead of database query
+            if msg.message_id in existing_message_ids:
+                logger.debug("Skipping message %s - event already exists", msg.message_id)
+                last_successfully_processed_timestamp = msg.timestamp
+                continue
 
-                event_time = msg.timestamp
-                timestamp_adjusted = False
+            event_time = msg.timestamp
+            timestamp_adjusted = False
 
-                if last_timestamp and event_time <= last_timestamp:
-                    original_time = event_time
-                    event_time = last_timestamp + timedelta(microseconds=1)
-                    timestamp_adjusted = True
-                    logger.warning(
-                        "Adjusted timestamp for historical email %s: "
-                        "%s -> %s (original preserved in payload)", msg.message_id, original_time, event_time
-                    )
-
-                last_timestamp = event_time
-
-                event = EventCreate(
-                    subject_id=email_account.subject_id,
-                    event_type="email_received",
-                    schema_version=1,
-                    event_time=event_time,
-                    payload={
-                        "message_id": msg.message_id,
-                        "thread_id": msg.thread_id,
-                        "from": msg.from_address,
-                        "to": msg.to_addresses,
-                        "subject": msg.subject,
-                        "received_at": msg.timestamp.isoformat(),
-                        "timestamp_adjusted": timestamp_adjusted,
-                        "labels": msg.labels,
-                        "is_read": msg.is_read,
-                        "is_starred": msg.is_starred,
-                        "has_attachments": msg.has_attachments,
-                        "provider": email_account.provider_type,
-                        "provider_metadata": msg.provider_metadata,
-                    },
+            if last_timestamp and event_time <= last_timestamp:
+                original_time = event_time
+                event_time = last_timestamp + timedelta(microseconds=1)
+                timestamp_adjusted = True
+                logger.debug(
+                    "Adjusted timestamp for email %s: %s -> %s",
+                    msg.message_id, original_time, event_time
                 )
 
+            last_timestamp = event_time
+
+            event = EventCreate(
+                subject_id=email_account.subject_id,
+                event_type="email_received",
+                schema_version=1,
+                event_time=event_time,
+                payload={
+                    "message_id": msg.message_id,
+                    "thread_id": msg.thread_id,
+                    "from": msg.from_address,
+                    "to": msg.to_addresses,
+                    "subject": msg.subject,
+                    "received_at": msg.timestamp.isoformat(),
+                    "timestamp_adjusted": timestamp_adjusted,
+                    "labels": msg.labels,
+                    "is_read": msg.is_read,
+                    "is_starred": msg.is_starred,
+                    "has_attachments": msg.has_attachments,
+                    "provider": email_account.provider_type,
+                    "provider_metadata": msg.provider_metadata,
+                },
+            )
+            events_to_create.append(event)
+            last_successfully_processed_timestamp = msg.timestamp
+
+        # BULK INSERT: Create all events in single DB roundtrip
+        if events_to_create:
+            try:
+                await self.event_service.create_events_bulk(
+                    tenant_id=email_account.tenant_id,
+                    events=events_to_create,
+                    skip_schema_validation=True,  # Email events don't use schema validation
+                    trigger_workflows=False,  # Batch sync doesn't trigger workflows
+                )
+                logger.info(
+                    "Bulk inserted %d email events for %s",
+                    len(events_to_create), email_account.email_address
+                )
+            except Exception as e:
+                logger.error(
+                    "Bulk insert failed for %s: %s. Falling back to sequential.",
+                    email_account.email_address, e, exc_info=True
+                )
+                # Fallback to sequential insert on bulk failure
+                return await self._create_events_sequential(
+                    email_account, events_to_create
+                )
+
+        return len(events_to_create), last_successfully_processed_timestamp
+
+    async def _create_events_sequential(
+        self, email_account: EmailAccount, events: list[EventCreate]
+    ) -> tuple[int, datetime | None]:
+        """
+        Fallback: Create events one by one if bulk insert fails.
+
+        This is slower but more resilient to individual event failures.
+        """
+        events_created = 0
+        last_timestamp: datetime | None = None
+
+        for event in events:
+            try:
                 await self.event_service.create_event(
                     tenant_id=email_account.tenant_id, event=event
                 )
-
                 events_created += 1
-                last_successfully_processed_timestamp = msg.timestamp
-
+                last_timestamp = event.event_time
             except Exception as e:
                 logger.error(
-                    "Failed to create event for message %s: %s", msg.message_id, e,
-                    exc_info=True,
+                    "Failed to create event for message %s: %s",
+                    event.payload.get("message_id"), e, exc_info=True
                 )
                 continue
 
-        return events_created, last_successfully_processed_timestamp
+        return events_created, last_timestamp
 
     async def _check_existing_events_batch(
         self, subject_id: str, message_ids: list[str]

@@ -565,6 +565,7 @@ async def oauth_callback(
         await db.flush()
 
     # Encrypt credentials for storage
+    # Include client_id/client_secret for token refresh (Google OAuth requires these)
     from src.infrastructure.external.email.encryption import CredentialEncryptor
 
     credential_encryptor = CredentialEncryptor()
@@ -575,6 +576,9 @@ async def oauth_callback(
         "expires_in": tokens.expires_in,
         "expires_at": tokens.expires_at.isoformat(),
         "scope": tokens.scope,
+        # Required for token refresh
+        "client_id": str(client_id),
+        "client_secret": str(client_secret),
     }
     credentials_encrypted = credential_encryptor.encrypt(credentials)
 

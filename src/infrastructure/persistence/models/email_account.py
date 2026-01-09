@@ -60,6 +60,16 @@ class EmailAccount(MultiTenantModel, Base):
     )  # For providers with webhook support
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Sync status tracking (for background sync progress)
+    sync_status: Mapped[str] = mapped_column(
+        String, nullable=False, default="idle", index=True
+    )  # idle, running, completed, failed
+    sync_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sync_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sync_messages_fetched: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sync_events_created: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sync_error: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # OAuth status tracking (enhanced failure handling)
     oauth_status: Mapped[str] = mapped_column(
         String, nullable=False, default="active", index=True

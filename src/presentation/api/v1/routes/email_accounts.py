@@ -24,8 +24,9 @@ from src.presentation.api.dependencies import (get_current_tenant, get_db,
                                                get_event_service_transactional)
 from src.presentation.api.v1.schemas.email_account import (
     EmailAccountCreate, EmailAccountResponse, EmailAccountUpdate,
-    EmailSyncRequest, EmailSyncResponse, WebhookSetupRequest)
+    EmailSyncRequest, EmailSyncResponse, SyncStatusResponse, WebhookSetupRequest)
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -266,9 +267,10 @@ async def sync_email_account_background(
 
 async def _run_email_sync_background(account_id: str, tenant_id: str, *, incremental: bool = True) -> None:
     """
-    Background task to run email sync.
+    Background task to run email sync with status tracking.
 
     This runs asynchronously after the HTTP response is sent.
+    Updates sync_status fields for progress monitoring.
     """
     # Create new DB session for background task
     from src.application.services.hash_service import HashService
@@ -279,6 +281,7 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, *, increme
         EventSchemaRepository
 
     async with AsyncSessionLocal() as db:
+        account = None
         try:
             logger.info("Starting background sync for account %s", account_id)
 
@@ -294,6 +297,14 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, *, increme
                 logger.error("Email account %s not found in background task", account_id)
                 return
 
+            # Update sync status to running
+            account.sync_status = "running"
+            account.sync_started_at = utc_now()
+            account.sync_error = None
+            account.sync_messages_fetched = 0
+            account.sync_events_created = 0
+            await db.commit()
+
             # Create services
             event_repo = EventRepository(db)
             schema_repo = EventSchemaRepository(db)
@@ -305,17 +316,75 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, *, increme
             sync_service = UniversalEmailSync(db, event_service)
             stats = await sync_service.sync_account(account, incremental=incremental)
 
+            # Update sync status to completed
+            account.sync_status = "completed"
+            account.sync_completed_at = utc_now()
+            account.sync_messages_fetched = int(stats["messages_fetched"])
+            account.sync_events_created = int(stats["events_created"])
+            await db.commit()
+
             logger.info(
-                f"Background sync completed for {account.email_address}: "
-                f"{stats['events_created']} events created from "
-                f"{stats['messages_fetched']} messages"
+                "Background sync completed for %s: %d events created from %d messages",
+                account.email_address,
+                stats["events_created"],
+                stats["messages_fetched"],
             )
 
         except AuthenticationError as e:
             logger.exception("Authentication failed for account %s: %s", account_id, e)
-            # Could notify user via webhook or email that re-authentication is needed
+            if account:
+                account.sync_status = "failed"
+                account.sync_completed_at = utc_now()
+                account.sync_error = f"Authentication failed: {e}"
+                await db.commit()
+
         except Exception as e:
             logger.exception("Background sync failed for account %s: %s", account_id, e)
+            if account:
+                account.sync_status = "failed"
+                account.sync_completed_at = utc_now()
+                account.sync_error = str(e)[:500]  # Truncate long errors
+                await db.commit()
+
+
+@router.get("/{account_id}/sync-status", response_model=SyncStatusResponse)
+async def get_sync_status(
+    account_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
+):
+    """
+    Get the current sync status for an email account.
+
+    Use this endpoint to poll for background sync progress.
+    """
+    result = await db.execute(
+        select(EmailAccount).where(
+            EmailAccount.id == account_id, EmailAccount.tenant_id == tenant.id
+        )
+    )
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email account not found")
+
+    # Calculate duration if we have timestamps
+    duration_seconds = None
+    if account.sync_started_at:
+        end_time = account.sync_completed_at or utc_now()
+        duration_seconds = (end_time - account.sync_started_at).total_seconds()
+
+    return SyncStatusResponse(
+        account_id=account.id,
+        email_address=account.email_address,
+        status=account.sync_status,
+        started_at=account.sync_started_at,
+        completed_at=account.sync_completed_at,
+        messages_fetched=account.sync_messages_fetched,
+        events_created=account.sync_events_created,
+        error=account.sync_error,
+        duration_seconds=duration_seconds,
+    )
 
 
 @router.post("/{account_id}/webhook", response_model=dict)
