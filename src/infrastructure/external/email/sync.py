@@ -111,7 +111,7 @@ class UniversalEmailSync:
             await provider.connect(config)
 
             since = email_account.last_sync_at if incremental else None
-            messages = await provider.fetch_messages(since=since, limit=500)
+            messages = await provider.fetch_messages(since=since)
 
             logger.info("Fetched %s messages from %s", len(messages), email_account.provider_type)
 

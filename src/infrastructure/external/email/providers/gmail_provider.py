@@ -15,7 +15,6 @@ logger = get_logger(__name__)
 
 # Gmail batch API limits
 BATCH_SIZE = 100  # Max requests per batch
-MAX_PAGES = 10  # Safety limit for pagination
 
 
 class GmailProvider:
@@ -50,28 +49,24 @@ class GmailProvider:
     async def fetch_messages(
         self,
         since: datetime | None = None,
-        limit: int = 500,
+        limit: int | None = None,
     ) -> list[EmailMessage]:
         """
         Fetch messages from Gmail using batch API with pagination.
 
         Performance optimizations:
         - Batch API: Fetches up to 100 messages per request (vs N+1 before)
-        - Pagination: Handles >100 messages via pageToken
-        - Limit cap: Default 500, max 1000 for safety
+        - Pagination: Automatically fetches all matching messages
 
         Args:
             since: Only fetch messages after this timestamp
-            limit: Maximum messages to fetch (default 500, max 1000)
+            limit: Optional maximum messages to fetch (None = no limit)
 
         Returns:
             List of EmailMessage objects
         """
         if not self._service:
             raise RuntimeError("Not connected to Gmail API")
-
-        # Cap limit for safety
-        limit = min(limit, 1000)
 
         # Build query
         query = ""
@@ -84,14 +79,12 @@ class GmailProvider:
         page_token: str | None = None
         pages_fetched = 0
 
-        while len(all_message_ids) < limit and pages_fetched < MAX_PAGES:
-            # Request up to 500 per page (Gmail's max)
-            page_size = min(500, limit - len(all_message_ids))
-
+        while True:
+            # Request up to 500 per page (Gmail's max per request)
             results = self._service.users().messages().list(
                 userId="me",
                 q=query,
-                maxResults=page_size,
+                maxResults=500,
                 pageToken=page_token,
             ).execute()
 
@@ -101,6 +94,11 @@ class GmailProvider:
 
             page_token = results.get("nextPageToken")
             if not page_token:
+                break
+
+            # Check optional limit
+            if limit and len(all_message_ids) >= limit:
+                all_message_ids = all_message_ids[:limit]
                 break
 
             logger.debug(
