@@ -784,7 +784,7 @@ class UniversalEmailSync:
                     })
 
             # 7. Update sync metadata
-            email_account.last_sync_at = datetime.utcnow()
+            email_account.last_sync_at = datetime.now(UTC)
             # Save to database
 
         finally:

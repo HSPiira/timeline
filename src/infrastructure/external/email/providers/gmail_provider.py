@@ -7,6 +7,7 @@ from googleapiclient.discovery import build
 from src.infrastructure.external.email.protocols import (EmailMessage,
                                                          EmailProviderConfig)
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import from_timestamp_ms_utc, utc_now
 
 logger = get_logger(__name__)
 
@@ -90,7 +91,7 @@ class GmailProvider:
         headers = {h['name']: h['value'] for h in msg['payload']['headers']}
 
         # Parse timestamp
-        timestamp = datetime.fromtimestamp(int(msg['internalDate']) / 1000)
+        timestamp = from_timestamp_ms_utc(int(msg['internalDate']))
 
         # Extract labels
         label_ids = msg.get('labelIds', [])

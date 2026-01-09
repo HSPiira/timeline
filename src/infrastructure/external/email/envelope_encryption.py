@@ -7,13 +7,13 @@ import hashlib
 import hmac
 import json
 import secrets
-from datetime import UTC, datetime
 from typing import Any, cast
 
 from cryptography.fernet import Fernet
 
 from src.infrastructure.config.settings import get_settings
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 
@@ -70,7 +70,7 @@ class EnvelopeEncryptor:
 
     def _generate_key_id(self) -> str:
         """Generate unique key identifier"""
-        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+        timestamp = utc_now().strftime("%Y%m%d%H%M%S")
         random_part = secrets.token_hex(8)
         return f"dek_{timestamp}_{random_part}"
 

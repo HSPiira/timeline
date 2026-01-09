@@ -165,7 +165,7 @@ class EmailProjectionService:
             unread_count=len(unread),
             last_received_at=max((e.event_time for e in received), default=None),
             last_sent_at=max((e.event_time for e in sent), default=None),
-            projected_at=datetime.utcnow()
+            projected_at=datetime.now(UTC)
         )
 
         await self.db.merge(projection)

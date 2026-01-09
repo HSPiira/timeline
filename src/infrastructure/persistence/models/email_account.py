@@ -54,7 +54,7 @@ class EmailAccount(MultiTenantModel, Base):
     )  # Actual scopes user granted
 
     # Sync metadata
-    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     webhook_id: Mapped[str | None] = mapped_column(
         String, nullable=True
     )  # For providers with webhook support
@@ -68,15 +68,15 @@ class EmailAccount(MultiTenantModel, Base):
         Integer, default=0, nullable=False
     )  # Consecutive errors
     oauth_next_retry_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
+        DateTime(timezone=True), nullable=True
     )  # Exponential backoff
 
     # Token health monitoring (prevents re-authentication issues)
-    token_last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    token_last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     token_refresh_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     token_refresh_failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_auth_error: Mapped[str | None] = mapped_column(String, nullable=True)
-    last_auth_error_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_auth_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (

@@ -15,7 +15,7 @@ import os
 import secrets
 import tempfile
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, BinaryIO, cast
 
@@ -31,6 +31,7 @@ from src.infrastructure.exceptions import (
     StoragePermissionError,
     StorageUploadError,
 )
+from src.shared.utils import from_timestamp_utc, utc_now
 
 
 class LocalStorageService:
@@ -203,7 +204,7 @@ class LocalStorageService:
                         "checksum": existing_checksum,
                         "size": target_path.stat().st_size,
                         "uploaded_at": existing_metadata.get(
-                            "uploaded_at", datetime.now(UTC).isoformat()
+                            "uploaded_at", utc_now().isoformat()
                         ),
                     }
                 else:
@@ -250,7 +251,7 @@ class LocalStorageService:
                     "checksum": computed_checksum,
                     "size": file_size,
                     "content_type": content_type,
-                    "uploaded_at": datetime.now(UTC).isoformat(),
+                    "uploaded_at": utc_now().isoformat(),
                     "custom": metadata or {},
                 }
                 await self._write_metadata(target_path, upload_metadata)
@@ -394,7 +395,7 @@ class LocalStorageService:
             "size": stat.st_size,
             "content_type": stored_metadata.get("content_type", "application/octet-stream"),
             "checksum": stored_metadata.get("checksum"),
-            "last_modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "last_modified": from_timestamp_utc(stat.st_mtime).isoformat(),
             "custom": stored_metadata.get("custom", {}),
         }
 
@@ -422,7 +423,7 @@ class LocalStorageService:
 
         # Generate secure token
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(UTC) + expiration
+        expires_at = utc_now() + expiration
 
         # Store token mapping
         self._download_tokens[token] = (storage_ref, expires_at)
@@ -438,7 +439,7 @@ class LocalStorageService:
 
     def _cleanup_expired_tokens(self) -> None:
         """Remove expired download tokens."""
-        now = datetime.now(UTC)
+        now = utc_now()
         expired = [
             token
             for token, (_, expires_at) in self._download_tokens.items()
@@ -463,7 +464,7 @@ class LocalStorageService:
         storage_ref, expires_at = self._download_tokens[token]
 
         # Check if expired
-        if datetime.now(UTC) > expires_at:
+        if utc_now() > expires_at:
             del self._download_tokens[token]
             return None
 

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime
-
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -30,6 +28,7 @@ from src.presentation.api.v1.schemas.oauth_provider import (
 from src.presentation.api.v1.schemas.token import TokenPayload
 from src.shared.enums import OAuthStatus
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/oauth-providers", tags=["OAuth Providers"])
@@ -278,7 +277,7 @@ async def delete_provider_config(
         )
 
     # Soft delete
-    config.deleted_at = datetime.now(UTC)
+    config.deleted_at = utc_now()
     config.deleted_by = current_user.sub
     config.is_active = False
 
@@ -566,7 +565,7 @@ async def oauth_callback(
         await db.flush()
 
     # Encrypt credentials for storage
-    from infrastructure.external.email.encryption import CredentialEncryptor
+    from src.infrastructure.external.email.encryption import CredentialEncryptor
 
     credential_encryptor = CredentialEncryptor()
     credentials = {
@@ -601,7 +600,7 @@ async def oauth_callback(
         email_account.oauth_next_retry_at = None
         email_account.last_auth_error = None
         email_account.last_auth_error_at = None
-        email_account.token_last_refreshed_at = datetime.now(UTC)
+        email_account.token_last_refreshed_at = utc_now()
         logger.info(f"Updated email account: {user_info.email}")
     else:
         # Create new email account
@@ -616,7 +615,7 @@ async def oauth_callback(
             oauth_provider_config_version=config.version,
             granted_scopes=tokens.scope.split(" ") if tokens.scope else [],
             oauth_status=OAuthStatus.ACTIVE.value,
-            token_last_refreshed_at=datetime.now(UTC),
+            token_last_refreshed_at=utc_now(),
         )
         db.add(email_account)
         logger.info(f"Created new email account: {user_info.email}")

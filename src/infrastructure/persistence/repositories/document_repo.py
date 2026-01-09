@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
@@ -9,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.persistence.models.document import Document
 from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
 from src.shared.enums import AuditAction
+from src.shared.utils import utc_now
 
 if TYPE_CHECKING:
     from src.application.services.system_audit_service import SystemAuditService
@@ -108,7 +108,7 @@ class DocumentRepository(AuditableRepository[Document]):
         """Soft delete a document with audit event."""
         document = await self.get_by_id(document_id)
         if document:
-            document.deleted_at = datetime.now(UTC)
+            document.deleted_at = utc_now()
             updated = await self.update(document)
             await self.emit_custom_audit(updated, AuditAction.DELETED)
             return updated

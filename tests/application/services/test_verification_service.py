@@ -1,6 +1,6 @@
 """Unit tests for VerificationService"""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -39,7 +39,7 @@ def create_test_event(
     schema_version: int = 1,
 ) -> Event:
     """Helper to create test event with valid hash"""
-    event_time = datetime.utcnow()
+    event_time = datetime.now(UTC)
 
     if hash_service is None:
         hash_service = HashService()

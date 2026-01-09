@@ -7,6 +7,7 @@ from msal import ConfidentialClientApplication
 from src.infrastructure.external.email.protocols import (EmailMessage,
                                                          EmailProviderConfig)
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 
@@ -146,7 +147,7 @@ class OutlookProvider:
             'notificationUrl': callback_url,
             'resource': '/me/mailFolders/inbox/messages',
             'expirationDateTime': (
-                datetime.utcnow().replace(hour=0, minute=0, second=0)
+                utc_now().replace(hour=0, minute=0, second=0)
                 + timedelta(days=3)
             ).isoformat() + 'Z',
             'clientState': 'timeline-secret-value'

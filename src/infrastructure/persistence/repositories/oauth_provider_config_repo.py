@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
@@ -12,7 +12,7 @@ from src.infrastructure.persistence.models.oauth_provider_config import (
     OAuthAuditLog, OAuthProviderConfig, OAuthState)
 from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
 from src.shared.enums import AuditAction
-from src.shared.utils.generators import generate_cuid
+from src.shared.utils import ensure_utc, generate_cuid, utc_now
 
 if TYPE_CHECKING:
     from src.application.services.system_audit_service import SystemAuditService
@@ -198,10 +198,12 @@ class OAuthProviderConfigRepository(AuditableRepository[OAuthProviderConfig]):
         if not config:
             return False
 
-        now = datetime.now(UTC)
+        now = utc_now()
+        # Normalize DB value to UTC-aware (handles legacy naive datetimes)
+        reset_at = ensure_utc(config.rate_limit_reset_at)
 
         # Reset counter if hour has passed
-        if config.rate_limit_reset_at and now > config.rate_limit_reset_at:
+        if reset_at and now > reset_at:
             config.current_hour_connections = 0
             config.rate_limit_reset_at = now + timedelta(hours=1)
 
@@ -231,7 +233,7 @@ class OAuthProviderConfigRepository(AuditableRepository[OAuthProviderConfig]):
         config = await self.get_by_id(config_id)
         if config:
             config.health_status = status
-            config.last_health_check_at = datetime.now(UTC)
+            config.last_health_check_at = utc_now()
             if error:
                 config.last_health_error = error
             await self.db.flush()
@@ -281,7 +283,7 @@ class OAuthStateRepository:
         ttl_minutes: int = 10,
     ) -> OAuthState:
         """Create new OAuth state"""
-        now = datetime.now(UTC)
+        now = utc_now()
         state = OAuthState(
             id=generate_cuid(),
             tenant_id=tenant_id,
@@ -314,10 +316,12 @@ class OAuthStateRepository:
         if not state:
             return None
 
-        now = datetime.now(UTC)
+        now = utc_now()
+        # Normalize DB value to UTC-aware (handles legacy naive datetimes)
+        expires_at = ensure_utc(state.expires_at)
 
         # Check if expired
-        if now > state.expires_at:
+        if expires_at and now > expires_at:
             return None
 
         # Check if already consumed
@@ -334,7 +338,7 @@ class OAuthStateRepository:
 
     async def cleanup_expired_states(self) -> int:
         """Delete expired OAuth states (cleanup job)"""
-        now = datetime.now(UTC)
+        now = utc_now()
         result = await self.db.execute(
             select(OAuthState).where(
                 and_(
@@ -376,7 +380,7 @@ class OAuthAuditLogRepository:
             provider_config_id=provider_config_id,
             actor_user_id=actor_user_id,
             action=action,
-            timestamp=datetime.now(UTC),
+            timestamp=utc_now(),
             changes=changes,
             reason=reason,
             ip_address=ip_address,

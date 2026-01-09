@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -16,6 +16,7 @@ from src.infrastructure.persistence.repositories import (
 from src.infrastructure.security.jwt import create_access_token
 from src.presentation.api.v1.schemas.token import Token, TokenRequest
 from src.presentation.middleware.rate_limit import limiter
+from src.shared.utils import utc_now
 
 router = APIRouter()
 settings = get_settings()
@@ -81,7 +82,7 @@ async def login(
             "sub": user.id,  # User ID (subject)
             "tenant_id": tenant.id,  # Tenant ID claim - prevents spoofing
             "username": user.username,  # Add username for logging
-            "iat": datetime.now(UTC),  # Issued at timestamp
+            "iat": utc_now(),  # Issued at timestamp
         },
         expires_delta=access_token_expires,
     )
@@ -117,7 +118,7 @@ if settings.debug and os.getenv("ENABLE_TEST_AUTH") == "true":
                 "sub": user_id,
                 "tenant_id": tenant_id,
                 "test_token": True,  # Mark as test token
-                "iat": datetime.now(UTC),
+                "iat": utc_now(),
             }
         )
 

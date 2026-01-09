@@ -8,6 +8,7 @@ import aioimaplib
 from src.infrastructure.external.email.protocols import (EmailMessage,
                                                          EmailProviderConfig)
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 
@@ -113,7 +114,7 @@ class IMAPProvider:
 
         # Parse date
         date_str = email_message.get('Date')
-        timestamp = parsedate_to_datetime(date_str) if date_str else datetime.utcnow()
+        timestamp = parsedate_to_datetime(date_str) if date_str else utc_now()
 
         # Extract flags
         flags_str = msg_data[0].decode() if msg_data[0] else ''

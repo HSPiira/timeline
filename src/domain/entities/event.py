@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.domain.value_objects.core import EventChain, EventType
+from src.shared.utils import utc_now
 
 
 @dataclass
@@ -33,7 +34,7 @@ class EventEntity:
         """Validate event business rules"""
         # Event time should not be in the future
 
-        now = datetime.now(UTC)
+        now = utc_now()
         event_time = (
             self.event_time if self.event_time.tzinfo else self.event_time.replace(tzinfo=UTC)
         )

@@ -137,7 +137,7 @@ class TestS3StorageUpload:
         # GIVEN - Object already exists
         existing_metadata = {
             "ContentLength": 35,
-            "LastModified": datetime.utcnow(),
+            "LastModified": datetime.now(UTC),
             "Metadata": {"sha256": sample_checksum},
         }
 
@@ -172,7 +172,7 @@ class TestS3StorageUpload:
         # GIVEN - Object exists with different checksum
         existing_metadata = {
             "ContentLength": 35,
-            "LastModified": datetime.utcnow(),
+            "LastModified": datetime.now(UTC),
             "Metadata": {"sha256": "different_checksum"},
         }
 
@@ -270,7 +270,7 @@ class TestS3StorageMetadata:
         head_response = {
             "ContentLength": 35,
             "ContentType": "text/plain",
-            "LastModified": datetime.utcnow(),
+            "LastModified": datetime.now(UTC),
             "Metadata": {"sha256": "test_checksum", "author": "test_user"},
         }
 

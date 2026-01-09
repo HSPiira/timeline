@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -12,6 +11,7 @@ from src.infrastructure.persistence.models.workflow import (Workflow,
                                                             WorkflowExecution)
 from src.infrastructure.persistence.repositories.auditable_repo import AuditableRepository
 from src.shared.enums import AuditAction
+from src.shared.utils import utc_now
 
 if TYPE_CHECKING:
     from src.application.services.system_audit_service import SystemAuditService
@@ -97,7 +97,7 @@ class WorkflowRepository(AuditableRepository[Workflow]):
         if not workflow:
             return False
 
-        workflow.deleted_at = datetime.now(UTC)
+        workflow.deleted_at = utc_now()
         await self.db.flush()
         # Emit deleted audit event
         await self._emit_audit_event(AuditAction.DELETED, workflow)

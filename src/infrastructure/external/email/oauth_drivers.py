@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, ClassVar
 from urllib.parse import urlencode
 
 import httpx
 
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 
@@ -202,7 +203,7 @@ class OAuthDriver(ABC):
     def _normalize_token_response(self, token_data: dict[str, Any]) -> OAuthTokens:
         """Normalize provider token response to standard format"""
         expires_in = token_data.get("expires_in", 3600)
-        expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+        expires_at = utc_now() + timedelta(seconds=expires_in)
 
         return OAuthTokens(
             access_token=token_data["access_token"],
@@ -232,10 +233,14 @@ class GmailDriver(OAuthDriver):
         }
 
     async def get_user_info(self, access_token: str) -> OAuthUserInfo:
-        """Get user email from Google userinfo endpoint"""
+        """Get user email from Gmail API profile endpoint.
+
+        Uses Gmail API instead of userinfo endpoint since we have gmail.readonly scope
+        but may not have the 'email' scope required for userinfo.
+        """
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                "https://www.googleapis.com/oauth2/v2/userinfo",
+                "https://gmail.googleapis.com/gmail/v1/users/me/profile",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
 
@@ -244,10 +249,10 @@ class GmailDriver(OAuthDriver):
 
             data: dict[str, Any] = response.json()
             return OAuthUserInfo(
-                email=data["email"],
-                name=data.get("name"),
-                picture=data.get("picture"),
-                provider_user_id=data.get("id"),
+                email=data["emailAddress"],
+                name=None,  # Gmail profile doesn't include name
+                picture=None,  # Gmail profile doesn't include picture
+                provider_user_id=data.get("historyId"),
                 provider_metadata=data,
             )
 

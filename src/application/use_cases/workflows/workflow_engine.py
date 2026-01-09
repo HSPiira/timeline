@@ -6,13 +6,13 @@ Executes workflows triggered by events.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
 from src.shared.enums import WorkflowExecutionStatus
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -117,7 +117,7 @@ class WorkflowEngine:
             triggered_by_event_id=triggered_by.id,
             triggered_by_subject_id=triggered_by.subject_id,
             status=WorkflowExecutionStatus.RUNNING.value,
-            started_at=datetime.now(UTC),
+            started_at=utc_now(),
         )
 
         self.db.add(execution)
@@ -139,7 +139,7 @@ class WorkflowEngine:
                             subject_id=triggered_by.subject_id,
                             event_type=params.get("event_type"),
                             schema_version=params.get("schema_version", 1),
-                            event_time=datetime.now(UTC),
+                            event_time=utc_now(),
                             payload=params.get("payload", {}),
                         )
 
@@ -190,7 +190,7 @@ class WorkflowEngine:
             execution.error_message = str(e)
             logger.exception("Workflow execution %s failed", execution.id)
 
-        execution.completed_at = datetime.now(UTC)
+        execution.completed_at = utc_now()
         execution.actions_executed = actions_executed
         execution.actions_failed = actions_failed
         execution.execution_log = execution_log

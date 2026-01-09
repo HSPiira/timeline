@@ -1,6 +1,6 @@
 """Universal email sync service (provider-agnostic)"""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Protocol, cast
 
 from google.auth.exceptions import RefreshError
@@ -17,6 +17,7 @@ from src.infrastructure.persistence.models.event import Event
 from src.infrastructure.persistence.models.subject import Subject
 from src.presentation.api.v1.schemas.event import EventCreate
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 logger = get_logger(__name__)
 
@@ -85,7 +86,7 @@ class UniversalEmailSync:
                     email_account.credentials_encrypted = self.encryptor.encrypt(
                         updated_credentials
                     )
-                    email_account.token_last_refreshed_at = datetime.now(UTC).replace(tzinfo=None)
+                    email_account.token_last_refreshed_at = utc_now()
                     email_account.token_refresh_count = (email_account.token_refresh_count or 0) + 1
                     logger.info(
                         "Auto-refreshed OAuth tokens for %s (refresh #%s). System working correctly!",
@@ -120,7 +121,7 @@ class UniversalEmailSync:
             ) = await self._transform_and_create_events(email_account, messages)
 
             if events_created > 0 and last_processed_timestamp:
-                email_account.last_sync_at = last_processed_timestamp.replace(tzinfo=None)
+                email_account.last_sync_at = last_processed_timestamp
             elif events_created == 0 and len(messages) > 0:
                 logger.warning(
                     "Fetched %s messages but created 0 events. "
@@ -147,7 +148,7 @@ class UniversalEmailSync:
         except RefreshError as e:
             # Track authentication failure for monitoring
             email_account.last_auth_error = str(e)
-            email_account.last_auth_error_at = datetime.now(UTC).replace(tzinfo=None)
+            email_account.last_auth_error_at = utc_now()
             email_account.token_refresh_failures = (email_account.token_refresh_failures or 0) + 1
             await self.db.commit()  # Persist error tracking even on failure
 

@@ -7,7 +7,7 @@ using the proper EventSchema infrastructure for validation and consistency.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -20,6 +20,7 @@ from src.application.services.system_audit_schema import (
 )
 from src.shared.enums import ActorType, AuditAction
 from src.shared.telemetry.logging import get_logger
+from src.shared.utils import utc_now
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,7 +86,7 @@ class SystemAuditService:
             return None
 
         # Build the audit payload following the schema
-        event_time = datetime.now(UTC)
+        event_time = utc_now()
         payload = self._build_audit_payload(
             entity_type=entity_type,
             entity_id=entity_id,
