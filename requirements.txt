@@ -375,7 +375,7 @@ tzlocal==5.3.1
     # via celery
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.6.2
+urllib3==2.6.3
     # via
     #   botocore
     #   requests
