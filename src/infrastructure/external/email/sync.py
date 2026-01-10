@@ -12,6 +12,13 @@ from src.infrastructure.external.email.encryption import CredentialEncryptor
 from src.infrastructure.external.email.factory import EmailProviderFactory
 from src.infrastructure.external.email.protocols import (EmailMessage,
                                                          EmailProviderConfig)
+from src.infrastructure.external.email.providers.gmail_provider import (
+    GmailProvider,
+    HistoryChange,
+    HistoryChangeType,
+    HistoryExpiredError,
+)
+from src.infrastructure.messaging.redis_pubsub import SyncProgressPublisher
 from src.infrastructure.persistence.models.email_account import EmailAccount
 from src.infrastructure.persistence.models.event import Event
 from src.infrastructure.persistence.models.subject import Subject
@@ -37,14 +44,23 @@ class AuthenticationError(Exception):
 class UniversalEmailSync:
     """Provider-agnostic email sync service"""
 
-    def __init__(self, db: AsyncSession, event_service: EventService):
+    def __init__(
+        self,
+        db: AsyncSession,
+        event_service: EventService,
+        progress_publisher: SyncProgressPublisher | None = None,
+    ):
         self.db = db
         self.event_service = event_service
         self.encryptor = CredentialEncryptor()
+        self.progress_publisher = progress_publisher
 
     async def sync_account(self, email_account: EmailAccount, *, incremental: bool = True) -> dict[str, int | str]:
         """
         Sync email account to Timeline events (works with ANY provider).
+
+        For Gmail accounts with history_sync_enabled and a valid gmail_history_id,
+        uses the more efficient History API. Otherwise falls back to timestamp-based sync.
 
         Args:
             email_account: EmailAccount configuration
@@ -53,12 +69,52 @@ class UniversalEmailSync:
         Returns:
             Sync statistics
         """
+        # Check if we can use Gmail History API for this sync
+        can_use_history = (
+            incremental
+            and email_account.provider_type == "gmail"
+            and email_account.history_sync_enabled
+            and email_account.gmail_history_id
+        )
+
+        if can_use_history:
+            logger.info(
+                "Starting HISTORY sync for %s (history_id: %s)",
+                email_account.email_address,
+                email_account.gmail_history_id,
+            )
+            try:
+                return await self._sync_via_history(email_account)
+            except HistoryExpiredError:
+                logger.warning(
+                    "History ID expired for %s, falling back to timestamp sync",
+                    email_account.email_address,
+                )
+                # Reset history sync state
+                email_account.gmail_history_id = None
+                email_account.history_sync_enabled = False
+                # Fall through to timestamp-based sync
+
+        return await self._sync_via_timestamp(email_account, incremental=incremental)
+
+    async def _sync_via_timestamp(
+        self, email_account: EmailAccount, *, incremental: bool = True
+    ) -> dict[str, int | str]:
+        """
+        Timestamp-based sync (original method).
+
+        Works with ALL providers. For Gmail, will capture history ID after
+        sync to enable future history-based syncs.
+        """
         logger.info(
-            "Starting sync for %s (provider: %s, incremental: %s)",
+            "Starting TIMESTAMP sync for %s (provider: %s, incremental: %s)",
             email_account.email_address,
             email_account.provider_type,
             incremental
         )
+
+        # Emit sync started event
+        await self._emit_progress_started(email_account)
 
         credentials = self.encryptor.decrypt(email_account.credentials_encrypted)
         config = EmailProviderConfig(
@@ -110,15 +166,24 @@ class UniversalEmailSync:
         try:
             await provider.connect(config)
 
+            # Emit fetching event
+            await self._emit_progress_fetching(email_account)
+
             since = email_account.last_sync_at if incremental else None
             messages = await provider.fetch_messages(since=since)
 
             logger.info("Fetched %s messages from %s", len(messages), email_account.provider_type)
 
+            # Emit processing event
+            await self._emit_progress_processing(email_account, len(messages))
+
             (
                 events_created,
                 last_processed_timestamp,
             ) = await self._transform_and_create_events(email_account, messages)
+
+            # Emit saving event
+            await self._emit_progress_saving(email_account, len(messages), events_created)
 
             if events_created > 0 and last_processed_timestamp:
                 email_account.last_sync_at = last_processed_timestamp
@@ -127,6 +192,22 @@ class UniversalEmailSync:
                     "Fetched %s messages but created 0 events. "
                     "Not updating last_sync_at to allow retry.", len(messages)
                 )
+
+            # Capture Gmail history ID for future incremental syncs
+            if email_account.provider_type == "gmail" and isinstance(provider, GmailProvider):
+                try:
+                    history_id = await provider.get_current_history_id()
+                    email_account.gmail_history_id = history_id
+                    email_account.history_sync_enabled = True
+                    logger.info(
+                        "Captured Gmail history ID %s for %s (history sync now enabled)",
+                        history_id, email_account.email_address
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to capture history ID for %s: %s",
+                        email_account.email_address, e
+                    )
 
             # Always commit to persist any token refreshes that occurred
             await self.db.commit()
@@ -139,8 +220,11 @@ class UniversalEmailSync:
                 "messages_fetched": len(messages),
                 "events_created": events_created,
                 "provider": email_account.provider_type,
-                "sync_type": "incremental" if incremental else "full",
+                "sync_type": "timestamp_incremental" if incremental else "full",
             }
+
+            # Emit completed event
+            await self._emit_progress_completed(email_account, len(messages), events_created)
 
             logger.info("Sync completed: %s", stats)
             return stats
@@ -152,6 +236,9 @@ class UniversalEmailSync:
             email_account.token_refresh_failures = (email_account.token_refresh_failures or 0) + 1
             await self.db.commit()  # Persist error tracking even on failure
 
+            # Emit failed event
+            await self._emit_progress_failed(email_account, str(e))
+
             logger.error(
                 "OAuth token refresh failed for %s: %s", email_account.email_address, e,
                 exc_info=True,
@@ -160,8 +247,240 @@ class UniversalEmailSync:
                 "Gmail OAuth token has expired or been revoked for %s. "
                 "Please re-authenticate the email account.", email_account.email_address
             ) from e
+        except Exception as e:
+            # Emit failed event for any other error
+            await self._emit_progress_failed(email_account, str(e))
+            raise
         finally:
             await provider.disconnect()
+
+    async def _sync_via_history(self, email_account: EmailAccount) -> dict[str, int | str]:
+        """
+        Gmail History API-based sync (more efficient).
+
+        Uses Gmail's history() API to get only changes since the last history ID.
+        This is more efficient than timestamp-based sync because:
+        - Only returns actual changes (not all messages)
+        - Includes message deletions
+        - Uses less API quota
+
+        Note: Only works for Gmail accounts with history_sync_enabled=True
+        """
+        # Emit sync started event
+        await self._emit_progress_started(email_account)
+
+        credentials = self.encryptor.decrypt(email_account.credentials_encrypted)
+        config = EmailProviderConfig(
+            provider_type="gmail",
+            email_address=email_account.email_address,
+            credentials=credentials,
+            connection_params=email_account.connection_params or {},
+        )
+
+        provider = cast(GmailProvider, EmailProviderFactory.create_provider(config))
+
+        # Setup token refresh callback
+        if hasattr(provider, "set_token_refresh_callback"):
+
+            def save_refreshed_tokens(updated_credentials: dict[str, str]) -> None:
+                try:
+                    email_account.credentials_encrypted = self.encryptor.encrypt(
+                        updated_credentials
+                    )
+                    email_account.token_last_refreshed_at = utc_now()
+                    email_account.token_refresh_count = (email_account.token_refresh_count or 0) + 1
+                    logger.info(
+                        "Auto-refreshed OAuth tokens for %s (refresh #%s)",
+                        email_account.email_address,
+                        email_account.token_refresh_count
+                    )
+                except Exception as e:
+                    email_account.token_refresh_failures = (
+                        email_account.token_refresh_failures or 0
+                    ) + 1
+                    logger.error(
+                        "Failed to save refreshed tokens for %s: %s",
+                        email_account.email_address, e, exc_info=True,
+                    )
+
+            cast(TokenRefreshProvider, provider).set_token_refresh_callback(save_refreshed_tokens)
+
+        try:
+            await provider.connect(config)
+
+            # Emit fetching event
+            await self._emit_progress_fetching(email_account)
+
+            # Fetch history changes
+            changes, new_history_id = await provider.fetch_history_changes(
+                start_history_id=email_account.gmail_history_id,  # type: ignore
+                history_types=["messageAdded", "messageDeleted"],
+            )
+
+            logger.info(
+                "Fetched %d history changes for %s",
+                len(changes), email_account.email_address
+            )
+
+            # Emit processing event
+            await self._emit_progress_processing(email_account, len(changes))
+
+            # Fetch full message details for additions
+            changes = await provider.fetch_messages_for_changes(changes)
+
+            # Process changes into events
+            events_created, events_deleted = await self._process_history_changes(
+                email_account, changes
+            )
+
+            # Emit saving event
+            await self._emit_progress_saving(
+                email_account, len(changes), events_created + events_deleted
+            )
+
+            # Update history ID for next sync
+            email_account.gmail_history_id = new_history_id
+
+            # Always commit
+            await self.db.commit()
+            logger.info(
+                "History sync committed (created: %d, deleted: %d, new_history_id: %s)",
+                events_created, events_deleted, new_history_id
+            )
+
+            stats: dict[str, int | str] = {
+                "messages_fetched": len(changes),
+                "events_created": events_created,
+                "events_deleted": events_deleted,
+                "provider": "gmail",
+                "sync_type": "history",
+                "new_history_id": new_history_id,
+            }
+
+            # Emit completed event
+            await self._emit_progress_completed(
+                email_account, len(changes), events_created + events_deleted
+            )
+
+            logger.info("History sync completed: %s", stats)
+            return stats
+
+        except RefreshError as e:
+            email_account.last_auth_error = str(e)
+            email_account.last_auth_error_at = utc_now()
+            email_account.token_refresh_failures = (email_account.token_refresh_failures or 0) + 1
+            await self.db.commit()
+
+            await self._emit_progress_failed(email_account, str(e))
+
+            logger.error(
+                "OAuth token refresh failed for %s: %s",
+                email_account.email_address, e, exc_info=True,
+            )
+            raise AuthenticationError(
+                "Gmail OAuth token has expired or been revoked for %s. "
+                "Please re-authenticate the email account.", email_account.email_address
+            ) from e
+        except HistoryExpiredError:
+            # Re-raise to trigger fallback in sync_account
+            raise
+        except Exception as e:
+            await self._emit_progress_failed(email_account, str(e))
+            raise
+        finally:
+            await provider.disconnect()
+
+    async def _process_history_changes(
+        self, email_account: EmailAccount, changes: list[HistoryChange]
+    ) -> tuple[int, int]:
+        """
+        Process Gmail history changes into Timeline events.
+
+        Args:
+            email_account: The email account being synced
+            changes: List of history changes from Gmail
+
+        Returns:
+            Tuple of (events_created, deletion_events_created)
+        """
+        events_created = 0
+        deletion_events_created = 0
+
+        # Separate additions and deletions
+        additions = [c for c in changes if c.change_type == HistoryChangeType.MESSAGE_ADDED]
+        deletions = [c for c in changes if c.change_type == HistoryChangeType.MESSAGE_DELETED]
+
+        # Process additions (same as regular sync)
+        if additions:
+            messages = [c.message for c in additions if c.message is not None]
+            if messages:
+                created, _ = await self._transform_and_create_events(email_account, messages)
+                events_created = created
+
+        # Process deletions (create email_deleted events)
+        if deletions:
+            deletion_events_created = await self._create_deletion_events(
+                email_account, deletions
+            )
+
+        return events_created, deletion_events_created
+
+    async def _create_deletion_events(
+        self, email_account: EmailAccount, deletions: list[HistoryChange]
+    ) -> int:
+        """
+        Create email_deleted events for deleted messages.
+
+        Args:
+            email_account: The email account
+            deletions: List of deletion changes
+
+        Returns:
+            Number of deletion events created
+        """
+        if not deletions:
+            return 0
+
+        events_to_create: list[EventCreate] = []
+        now = utc_now()
+
+        for deletion in deletions:
+            # Create deletion event
+            event = EventCreate(
+                subject_id=email_account.subject_id,
+                event_type="email_deleted",
+                schema_version=1,
+                event_time=now,
+                payload={
+                    "gmail_id": deletion.gmail_id,
+                    "message_id": deletion.message_id,
+                    "thread_id": deletion.thread_id,
+                    "deleted_at": now.isoformat(),
+                    "provider": "gmail",
+                },
+            )
+            events_to_create.append(event)
+
+        if events_to_create:
+            try:
+                await self.event_service.create_events_bulk(
+                    tenant_id=email_account.tenant_id,
+                    events=events_to_create,
+                    skip_schema_validation=True,
+                    trigger_workflows=False,
+                )
+                logger.info(
+                    "Created %d email_deleted events for %s",
+                    len(events_to_create), email_account.email_address
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to create deletion events for %s: %s",
+                    email_account.email_address, e, exc_info=True
+                )
+                return 0
+
+        return len(events_to_create)
 
     async def _transform_and_create_events(
         self, email_account: EmailAccount, messages: list[EmailMessage]
@@ -402,3 +721,73 @@ class UniversalEmailSync:
             )
         )
         return result.scalar_one_or_none()
+
+    # Progress event emission helpers
+
+    async def _emit_progress_started(self, email_account: EmailAccount) -> None:
+        """Emit sync started progress event"""
+        if self.progress_publisher and self.progress_publisher.is_available():
+            await self.progress_publisher.publish_started(
+                tenant_id=email_account.tenant_id,
+                account_id=email_account.id,
+                email_address=email_account.email_address,
+            )
+
+    async def _emit_progress_fetching(self, email_account: EmailAccount) -> None:
+        """Emit fetching messages progress event"""
+        if self.progress_publisher and self.progress_publisher.is_available():
+            await self.progress_publisher.publish_fetching(
+                tenant_id=email_account.tenant_id,
+                account_id=email_account.id,
+                email_address=email_account.email_address,
+            )
+
+    async def _emit_progress_processing(
+        self, email_account: EmailAccount, messages_fetched: int
+    ) -> None:
+        """Emit processing messages progress event"""
+        if self.progress_publisher and self.progress_publisher.is_available():
+            await self.progress_publisher.publish_processing(
+                tenant_id=email_account.tenant_id,
+                account_id=email_account.id,
+                email_address=email_account.email_address,
+                messages_fetched=messages_fetched,
+            )
+
+    async def _emit_progress_saving(
+        self, email_account: EmailAccount, messages_fetched: int, events_created: int
+    ) -> None:
+        """Emit saving events progress event"""
+        if self.progress_publisher and self.progress_publisher.is_available():
+            await self.progress_publisher.publish_saving(
+                tenant_id=email_account.tenant_id,
+                account_id=email_account.id,
+                email_address=email_account.email_address,
+                messages_fetched=messages_fetched,
+                events_created=events_created,
+            )
+
+    async def _emit_progress_completed(
+        self, email_account: EmailAccount, messages_fetched: int, events_created: int
+    ) -> None:
+        """Emit sync completed progress event"""
+        if self.progress_publisher and self.progress_publisher.is_available():
+            await self.progress_publisher.publish_completed(
+                tenant_id=email_account.tenant_id,
+                account_id=email_account.id,
+                email_address=email_account.email_address,
+                messages_fetched=messages_fetched,
+                events_created=events_created,
+            )
+
+    async def _emit_progress_failed(
+        self, email_account: EmailAccount, error: str
+    ) -> None:
+        """Emit sync failed progress event"""
+        if self.progress_publisher and self.progress_publisher.is_available():
+            await self.progress_publisher.publish_failed(
+                tenant_id=email_account.tenant_id,
+                account_id=email_account.id,
+                email_address=email_account.email_address,
+                error=error,
+            )

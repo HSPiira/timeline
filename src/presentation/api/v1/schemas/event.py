@@ -123,3 +123,22 @@ class EventResponse(BaseModel):
             }
         },
     )
+
+
+class EventListResponse(BaseModel):
+    """Paginated response for event lists"""
+    items: list[EventResponse]
+    total: int
+    skip: int
+    limit: int
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "items": [],
+                "total": 100,
+                "skip": 0,
+                "limit": 50,
+            }
+        },
+    )

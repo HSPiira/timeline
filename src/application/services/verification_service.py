@@ -100,10 +100,14 @@ class VerificationService:
         Returns:
             ChainVerificationResult with detailed verification status
         """
-        # Get all events for subject and sort in chronological order (oldest first)
+        # Get all events for subject and sort by creation order (oldest first)
+        # IMPORTANT: We sort by created_at, not event_time, because:
+        # - The genesis event (previous_hash=None) is the first event CREATED
+        # - Email sync may adjust event_time to maintain chronological order
+        # - Sorting by event_time could put an adjusted event before genesis
         events = await self.event_repo.get_by_subject(subject_id, tenant_id)
         # Repository returns DESC order, but verification needs ASC (oldest first)
-        events = sorted(events, key=lambda e: e.event_time)
+        events = sorted(events, key=lambda e: e.created_at)
 
         if not events:
             return ChainVerificationResult(
@@ -176,10 +180,11 @@ class VerificationService:
                 events_by_subject[event.subject_id] = []
             events_by_subject[event.subject_id].append(event)
 
-        # Sort each subject's events chronologically (oldest first) for verification
+        # Sort each subject's events by creation order (oldest first) for verification
+        # Use created_at instead of event_time (see verify_subject_chain comments)
         for subject_id in events_by_subject:
             events_by_subject[subject_id] = sorted(
-                events_by_subject[subject_id], key=lambda e: e.event_time
+                events_by_subject[subject_id], key=lambda e: e.created_at
             )
 
         all_results: list[VerificationResult] = []
