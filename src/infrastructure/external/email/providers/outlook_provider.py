@@ -66,41 +66,65 @@ class OutlookProvider:
     async def fetch_messages(
         self,
         since: Optional[datetime] = None,
-        limit: int = 100
+        limit: int | None = None
     ) -> List[EmailMessage]:
-        """Fetch messages from Outlook via Graph API"""
+        """Fetch messages from Outlook via Graph API with pagination"""
         if not self._access_token:
             raise RuntimeError("Not connected to Microsoft Graph")
 
-        # Build query parameters
-        params = {
-            '$top': limit,
+        messages: List[EmailMessage] = []
+        next_link: str | None = None
+
+        # Build initial query parameters
+        params: dict = {
             '$orderby': 'receivedDateTime DESC'
         }
+        if limit:
+            params['$top'] = min(limit, 1000)  # Graph API max per request
+        else:
+            params['$top'] = 1000
 
         if since:
             iso_date = since.isoformat()
             params['$filter'] = f"receivedDateTime ge {iso_date}"
 
-        # Make request
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self._graph_url}/me/messages",
-                headers={'Authorization': f'Bearer {self._access_token}'},
-                params=params
-            )
-            response.raise_for_status()
-            data = response.json()
+            while True:
+                # Use next_link for pagination or initial URL
+                if next_link:
+                    response = await client.get(
+                        next_link,
+                        headers={'Authorization': f'Bearer {self._access_token}'}
+                    )
+                else:
+                    response = await client.get(
+                        f"{self._graph_url}/me/messages",
+                        headers={'Authorization': f'Bearer {self._access_token}'},
+                        params=params
+                    )
+                response.raise_for_status()
+                data = response.json()
 
-        # Parse messages
-        messages = []
-        for item in data.get('value', []):
-            try:
-                msg = self._parse_outlook_message(item)
-                messages.append(msg)
-            except Exception as e:
-                logger.error(f"Error parsing Outlook message: {e}")
-                continue
+                # Parse messages from this page
+                for item in data.get('value', []):
+                    try:
+                        msg = self._parse_outlook_message(item)
+                        messages.append(msg)
+                    except Exception as e:
+                        logger.error(f"Error parsing Outlook message: {e}")
+                        continue
+
+                # Check for more pages
+                next_link = data.get('@odata.nextLink')
+                if not next_link:
+                    break
+
+                # Check optional limit
+                if limit and len(messages) >= limit:
+                    messages = messages[:limit]
+                    break
+
+                logger.debug("Outlook pagination: fetched %d messages, continuing...", len(messages))
 
         logger.info(f"Fetched {len(messages)} messages from Outlook")
         return messages

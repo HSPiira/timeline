@@ -14,7 +14,7 @@ from src.presentation.api.dependencies import (get_current_tenant,
                                                get_event_repo,
                                                get_event_service_transactional,
                                                require_permission)
-from src.presentation.api.v1.schemas.event import EventCreate, EventResponse
+from src.presentation.api.v1.schemas.event import EventCreate, EventListResponse, EventResponse
 from src.presentation.api.v1.schemas.verification import (
     ChainVerificationResponse, EventVerificationResult)
 
@@ -60,17 +60,28 @@ async def create_event(
     return await service.create_event(tenant.id, event)
 
 
-@router.get("/subject/{subject_id}", response_model=list[EventResponse])
+@router.get("/subject/{subject_id}", response_model=EventListResponse)
 async def get_subject_timeline(
     subject_id: str,
     repo: Annotated[EventRepository, Depends(get_event_repo)],
     tenant: Annotated[Tenant, Depends(get_current_tenant)],
     skip: Annotated[int, Query(ge=0, description="Number of records to skip")] = 0,
-    limit: Annotated[int, Query(ge=1, le=1000, description="Max records to return")] = 100,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max records to return")] = 50,
 ):
-    """Get all events for a subject (timeline)"""
+    """Get paginated events for a subject (timeline)"""
     events = await repo.get_by_subject(subject_id, tenant.id, skip, limit)
-    return events
+    total = await repo.count_by_subject(subject_id, tenant.id)
+    return EventListResponse(items=events, total=total, skip=skip, limit=limit)
+
+
+@router.get("/count", response_model=dict)
+async def count_events(
+    repo: Annotated[EventRepository, Depends(get_event_repo)],
+    tenant: Annotated[Tenant, Depends(get_current_tenant)],
+):
+    """Get total event count for the tenant (for dashboard stats)"""
+    total = await repo.count_by_tenant(tenant.id)
+    return {"total": total}
 
 
 @router.get("/{event_id}", response_model=EventResponse)

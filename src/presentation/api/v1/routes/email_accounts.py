@@ -312,8 +312,12 @@ async def _run_email_sync_background(account_id: str, tenant_id: str, *, increme
             subject_repo = SubjectRepository(db)
             event_service = EventService(event_repo, hash_service, subject_repo, schema_repo)
 
-            # Run sync
-            sync_service = UniversalEmailSync(db, event_service)
+            # Get progress publisher for real-time updates
+            from src.infrastructure.messaging.redis_pubsub import get_sync_publisher
+            progress_publisher = get_sync_publisher()
+
+            # Run sync with progress publisher
+            sync_service = UniversalEmailSync(db, event_service, progress_publisher)
             stats = await sync_service.sync_account(account, incremental=incremental)
 
             # Update sync status to completed

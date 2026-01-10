@@ -46,14 +46,14 @@ class IEmailProvider(Protocol):
         ...
 
     async def fetch_messages(
-        self, since: datetime | None = None, limit: int = 100
+        self, since: datetime | None = None, limit: int | None = None
     ) -> list[EmailMessage]:
         """
         Fetch messages from provider.
 
         Args:
             since: Only fetch messages after this timestamp (None = all)
-            limit: Maximum number of messages to fetch
+            limit: Optional maximum number of messages (None = no limit)
 
         Returns:
             List of EmailMessage objects

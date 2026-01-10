@@ -69,6 +69,23 @@ class EventRepository(BaseRepository[Event]):
         )
         return list(result.scalars().all())
 
+    async def count_by_subject(self, subject_id: str, tenant_id: str) -> int:
+        """Count total events for a subject within a tenant"""
+        result = await self.db.execute(
+            select(func.count(Event.id))
+            .where(Event.subject_id == subject_id)
+            .where(Event.tenant_id == tenant_id)
+        )
+        return result.scalar() or 0
+
+    async def count_by_tenant(self, tenant_id: str) -> int:
+        """Count total events for a tenant"""
+        result = await self.db.execute(
+            select(func.count(Event.id))
+            .where(Event.tenant_id == tenant_id)
+        )
+        return result.scalar() or 0
+
     async def get_by_tenant(self, tenant_id: str, skip: int = 0, limit: int = 100) -> list[Event]:
         """Get all events for a tenant with pagination"""
         result = await self.db.execute(

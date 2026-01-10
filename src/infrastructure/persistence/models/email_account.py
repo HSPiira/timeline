@@ -60,6 +60,14 @@ class EmailAccount(MultiTenantModel, Base):
     )  # For providers with webhook support
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Gmail History API support (for efficient incremental sync)
+    gmail_history_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )  # Last known history ID for Gmail sync
+    history_sync_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )  # Whether to use history-based sync (auto-enabled after first full sync)
+
     # Sync status tracking (for background sync progress)
     sync_status: Mapped[str] = mapped_column(
         String, nullable=False, default="idle", index=True

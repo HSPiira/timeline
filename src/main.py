@@ -13,11 +13,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.domain.exceptions import TimelineException
 from src.infrastructure.cache.redis_cache import CacheService
 from src.infrastructure.config.settings import get_settings
+from src.infrastructure.messaging.redis_pubsub import (
+    SyncProgressPublisher,
+    get_sync_publisher,
+    set_sync_publisher,
+)
 from src.infrastructure.persistence.database import engine, get_db
 from src.presentation.api.dependencies import (
     get_cache_service,
     set_cache_service,
 )
+from src.presentation.api.websocket.manager import get_connection_manager
 from src.presentation.api.v1.routes import (
     auth,
     documents,
@@ -31,6 +37,7 @@ from src.presentation.api.v1.routes import (
     tenants,
     user_roles,
     users,
+    websocket,
     workflows,
 )
 from src.presentation.middleware.correlation import CorrelationIDMiddleware
@@ -110,6 +117,18 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Redis cache disabled in configuration")
 
+    # Initialize Redis sync progress publisher
+    if settings.redis_enabled:
+        try:
+            sync_publisher = SyncProgressPublisher()
+            await sync_publisher.connect()
+            set_sync_publisher(sync_publisher)
+            logger.info("Redis sync progress publisher initialized")
+        except Exception as e:
+            logger.warning(f"Sync progress publisher failed: {e}. Continuing without real-time updates.")
+    else:
+        logger.info("Sync progress publisher disabled (Redis not enabled)")
+
     yield
 
     # Shutdown: close connections
@@ -130,6 +149,23 @@ async def lifespan(app: FastAPI):
             logger.info("Redis cache disconnected")
         except Exception as e:
             logger.warning(f"Error during cache shutdown: {e}")
+
+    # Shutdown sync progress publisher
+    if settings.redis_enabled:
+        try:
+            sync_pub = get_sync_publisher()
+            if sync_pub:
+                await sync_pub.disconnect()
+                logger.info("Sync progress publisher disconnected")
+        except Exception as e:
+            logger.warning(f"Error during sync publisher shutdown: {e}")
+
+    # Close all WebSocket connections
+    try:
+        ws_manager = get_connection_manager()
+        await ws_manager.close_all()
+    except Exception as e:
+        logger.warning(f"Error closing WebSocket connections: {e}")
 
     await engine.dispose()
     logger.info("Database engine disposed")
@@ -240,6 +276,7 @@ app.include_router(permissions.router, prefix="/permissions", tags=["permissions
 app.include_router(user_roles.router, prefix="", tags=["user-roles"])
 app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
 app.include_router(email_accounts.router, prefix="/email-accounts", tags=["email-accounts"])
+app.include_router(websocket.router, tags=["websocket"])
 
 
 @app.get("/")

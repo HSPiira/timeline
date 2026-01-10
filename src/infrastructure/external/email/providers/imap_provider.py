@@ -58,7 +58,7 @@ class IMAPProvider:
     async def fetch_messages(
         self,
         since: Optional[datetime] = None,
-        limit: int = 100
+        limit: int | None = None
     ) -> List[EmailMessage]:
         """Fetch messages from IMAP server"""
         if not self._client:
@@ -78,8 +78,9 @@ class IMAPProvider:
         _, msg_ids = await self._client.search(search_criteria)
         msg_id_list = msg_ids[0].split()
 
-        # Limit results
-        msg_id_list = msg_id_list[-limit:] if len(msg_id_list) > limit else msg_id_list
+        # Apply optional limit (take most recent)
+        if limit and len(msg_id_list) > limit:
+            msg_id_list = msg_id_list[-limit:]
 
         messages = []
         for msg_id in msg_id_list:
